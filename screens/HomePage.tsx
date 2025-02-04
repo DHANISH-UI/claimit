@@ -26,7 +26,7 @@ const LostAndFoundPage = () => {
                 {/* Header Section */}
                 <View style={styles.header}>
                     <Text style={styles.tagline}>
-                        "Reuniting Lost Items with Their Owners – Because Every Lost Item Deserves a Second Chance!"
+                        "Reuniting Lost Items with Their Owners hello – Because Every Lost Item Deserves a Second Chance!"
                     </Text>
                 </View>
 
