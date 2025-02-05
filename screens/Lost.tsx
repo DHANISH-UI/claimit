@@ -8,11 +8,11 @@ import {
   ScrollView,
   TextInput,
   Alert,
-  Platform,
+  Platform
 } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons'; // For icons
-// import * as ImagePicker from 'expo-image-picker'; // For photo upload
-// import MapView, { Marker } from 'react-native-maps'; // For location integration
+import { Picker } from '@react-native-picker/picker';
+import * as ImagePicker from 'expo-image-picker';
+import { Ionicons } from '@expo/vector-icons';
 
 const LostItemPage = () => {
   const [itemName, setItemName] = useState('');
@@ -21,18 +21,13 @@ const LostItemPage = () => {
   const [date, setDate] = useState('');
   const [contactDetails, setContactDetails] = useState('');
   const [photos, setPhotos] = useState([]);
-  const [location, setLocation] = useState({
-    latitude: 37.78825,
-    longitude: -122.4324,
-    latitudeDelta: 0.0922,
-    longitudeDelta: 0.0421,
-  });
+  
+  const categories = ['Electronics', 'Gadgets', 'Clothing', 'Documents', 'Wallet', 'Keys', 'Other'];
 
-  // Request camera roll permissions on component mount
   useEffect(() => {
     (async () => {
       if (Platform.OS !== 'web') {
-        // const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (status !== 'granted') {
           Alert.alert(
             'Permission denied',
@@ -43,35 +38,29 @@ const LostItemPage = () => {
     })();
   }, []);
 
-  // Handle photo upload
-  // const handlePhotoUpload = async () => {
-  //   let result = await ImagePicker.launchImageLibraryAsync({
-  //     mediaTypes: ImagePicker.MediaTypeOptions.Images,
-  //     allowsEditing: true,
-  //     aspect: [4, 3],
-  //     quality: 1,
-  //   });
+  const handlePhotoUpload = async () => {
+    let result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [4, 3],
+      quality: 1,
+    });
 
-  //   if (!result.canceled) {
-  //     setPhotos([...photos, result.assets[0].uri]);
-  //   }
-  // };
+    if (!result.canceled) {
+      setPhotos([...photos, result.assets[0].uri]);
+    }
+  };
 
-  // Handle form submission
+  const removePhoto = (index) => {
+    setPhotos(photos.filter((_, i) => i !== index));
+  };
+
   const handleSubmit = () => {
-    if (
-      !itemName ||
-      !category ||
-      !description ||
-      !date ||
-      !contactDetails ||
-      photos.length === 0
-    ) {
+    if (!itemName || !category || !description || !date || !contactDetails || photos.length === 0) {
       Alert.alert('Error', 'Please fill all fields and upload at least one photo.');
       return;
     }
     Alert.alert('Success', 'Lost item posted successfully!');
-    // Reset form
     setItemName('');
     setCategory('');
     setDescription('');
@@ -84,20 +73,26 @@ const LostItemPage = () => {
     <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.title}>Report a Lost Item</Text>
 
+      {/* Category Dropdown */}
+      <View style={styles.pickerContainer}>
+        <Picker
+          selectedValue={category}
+          onValueChange={(itemValue) => setCategory(itemValue)}
+          style={styles.picker}
+        >
+          <Picker.Item label="Select a Category" value="" />
+          {categories.map((cat, index) => (
+            <Picker.Item key={index} label={cat} value={cat} />
+          ))}
+        </Picker>
+      </View>
+
       {/* Item Name */}
       <TextInput
         style={styles.input}
         placeholder="Item Name"
         value={itemName}
         onChangeText={setItemName}
-      />
-
-      {/* Category */}
-      <TextInput
-        style={styles.input}
-        placeholder="Category (e.g., Wallet, Phone)"
-        value={category}
-        onChangeText={setCategory}
       />
 
       {/* Description */}
@@ -125,25 +120,21 @@ const LostItemPage = () => {
         onChangeText={setContactDetails}
       />
 
-      {/* Photo Upload
+      {/* Photo Upload */}
       <TouchableOpacity style={styles.uploadButton} onPress={handlePhotoUpload}>
         <Text style={styles.uploadButtonText}>Upload Photos</Text>
       </TouchableOpacity>
+      
       <View style={styles.photosContainer}>
         {photos.map((photo, index) => (
-          <Image key={index} source={{ uri: photo }} style={styles.photo} />
+          <View key={index} style={styles.photoWrapper}>
+            <Image source={{ uri: photo }} style={styles.photo} />
+            <TouchableOpacity style={styles.removeIcon} onPress={() => removePhoto(index)}>
+              <Ionicons name="close-circle" size={24} color="red" />
+            </TouchableOpacity>
+          </View>
         ))}
-      </View> */}
-
-      {/* Location */}
-      {/* <Text style={styles.sectionTitle}>Location Lost</Text>
-      <MapView
-        style={styles.map}
-        initialRegion={location}
-        onPress={(e) => setLocation(e.nativeEvent.coordinate)}
-      >
-        <Marker coordinate={location} />
-      </MapView> */}
+      </View>
 
       {/* Submit Button */}
       <TouchableOpacity style={styles.submitButton} onPress={handleSubmit}>
@@ -164,6 +155,16 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: 20,
     textAlign: 'center',
+  },
+  pickerContainer: {
+    borderColor: '#ccc',
+    borderWidth: 1,
+    borderRadius: 8,
+    marginBottom: 15,
+  },
+  picker: {
+    height: 50,
+    width: '100%',
   },
   input: {
     height: 40,
@@ -191,25 +192,23 @@ const styles = StyleSheet.create({
   photosContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    justifyContent: 'flex-start',
     marginBottom: 15,
   },
-  photo: {
-    width: 80,
-    height: 80,
-    borderRadius: 8,
+  photoWrapper: {
+    position: 'relative',
     marginRight: 10,
     marginBottom: 10,
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 10,
-  },
-  map: {
-    width: '100%',
-    height: 200,
+  photo: {
+    width: 100,
+    height: 100,
     borderRadius: 8,
-    marginBottom: 20,
+  },
+  removeIcon: {
+    position: 'absolute',
+    top: -5,
+    right: -5,
   },
   submitButton: {
     backgroundColor: '#ff6b6b',
