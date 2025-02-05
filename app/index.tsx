@@ -9,7 +9,7 @@ export default function Index() {
   return (
     //<HomePage />
     //<SignInSignUpPage />
-    //<Found />
-    <Lost />
+    <Found />
+    //<Lost />
   );
 }
