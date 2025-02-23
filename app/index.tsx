@@ -7,9 +7,10 @@ import Lost from "@/screens/Lost"
 
 export default function Index() {
   return (
+    // Choose one component to render
     //<HomePage />
-    //<SignInSignUpPage />
-    <Found />
+    <SignInSignUpPage />
+    //<Found />
     //<Lost />
   );
 }

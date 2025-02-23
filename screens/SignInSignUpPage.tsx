@@ -7,14 +7,21 @@ import {
   TouchableOpacity,
   Image,
   ScrollView,
+  Platform,
+  Dimensions
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons'; // For icons
+import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+const { width } = Dimensions.get('window');
 
 const SignInSignUpPage = ({ /* navigation */}) => {
   const [isSignUp, setIsSignUp] = useState(false); // Toggle between Sign In and Sign Up
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const insets = useSafeAreaInsets();
 
   const handleSignIn = () => {
     // Add your sign-in logic here
@@ -27,96 +34,140 @@ const SignInSignUpPage = ({ /* navigation */}) => {
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      {/* Logo */}
-      <Image source={require('../assets/images/logo copy.png')} style={styles.logo} />
-
-      {/* Title */}
-      <Text style={styles.title}>{isSignUp ? 'Sign Up' : 'Sign In'}</Text>
-
-      {/* Email Input */}
-      <View style={styles.inputContainer}>
-        <MaterialIcons name="email" size={24} color="#4a4a4a" />
-        <TextInput
-          style={styles.input}
-          placeholder="Email"
-          placeholderTextColor="#999"
-          value={email}
-          onChangeText={setEmail}
-          keyboardType="email-address"
-          autoCapitalize="none"
-        />
-      </View>
-
-      {/* Password Input */}
-      <View style={styles.inputContainer}>
-        <MaterialIcons name="lock" size={24} color="#4a4a4a" />
-        <TextInput
-          style={styles.input}
-          placeholder="Password"
-          placeholderTextColor="#999"
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-        />
-      </View>
-
-      {/* Confirm Password Input (for Sign Up) */}
-      {isSignUp && (
-        <View style={styles.inputContainer}>
-          <MaterialIcons name="lock" size={24} color="#4a4a4a" />
-          <TextInput
-            style={styles.input}
-            placeholder="Confirm Password"
-            placeholderTextColor="#999"
-            value={confirmPassword}
-            onChangeText={setConfirmPassword}
-            secureTextEntry
-          />
-        </View>
-      )}
-
-      {/* Forgot Password */}
-      {/*!isSignUp && (
-        <TouchableOpacity onPress={() => navigation.navigate('ForgotPassword')}>
-          <Text style={styles.forgotPassword}>Forgot Password?</Text>
-        </TouchableOpacity>
-      )*/}
-
-      {/* Sign In/Sign Up Button */}
-      <TouchableOpacity
-        style={styles.button}
-        onPress={isSignUp ? handleSignUp : handleSignIn}
+    <ScrollView 
+      style={styles.container}
+      showsVerticalScrollIndicator={false}
+    >
+      <LinearGradient
+        colors={['#0f172a', '#1e293b']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={[styles.headerSection, { paddingTop: insets.top }]}
       >
-        <Text style={styles.buttonText}>{isSignUp ? 'Sign Up' : 'Sign In'}</Text>
-      </TouchableOpacity>
+        <Image 
+          source={require('../assets/images/logo copy.png')} 
+          style={styles.logo}
+          resizeMode="contain"
+        />
+      </LinearGradient>
 
-      {/* Toggle between Sign In and Sign Up */}
-      <TouchableOpacity onPress={() => setIsSignUp(!isSignUp)}>
-        <Text style={styles.toggleText}>
-          {isSignUp
-            ? 'Already have an account? Sign In'
-            : "Don't have an account? Sign Up"}
-        </Text>
-      </TouchableOpacity>
+      <View style={styles.formSection}>
+        <View style={styles.welcomeContainer}>
+          <Text style={styles.welcomeText}>
+            {isSignUp ? 'Create Account' : 'Welcome Back'}
+          </Text>
+          <Text style={styles.subtitleText}>
+            {isSignUp 
+              ? 'Please fill in the form to continue' 
+              : 'Please sign in to continue'}
+          </Text>
+        </View>
 
-      {/* Social Media Login */}
-      <View style={styles.socialLoginContainer}>
-        <Text style={styles.socialLoginText}>Or sign in with</Text>
-        <View style={styles.socialButtons}>
+        <View style={styles.inputsContainer}>
+          <View style={styles.inputWrapper}>
+            <Text style={styles.inputLabel}>Email</Text>
+            <View style={styles.inputContainer}>
+              <MaterialIcons name="email" size={20} color="#94a3b8" />
+              <TextInput
+                style={styles.input}
+                placeholder="Enter your email"
+                placeholderTextColor="#94a3b8"
+                value={email}
+                onChangeText={setEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
+              />
+            </View>
+          </View>
+
+          <View style={styles.inputWrapper}>
+            <Text style={styles.inputLabel}>Password</Text>
+            <View style={styles.inputContainer}>
+              <MaterialIcons name="lock" size={20} color="#94a3b8" />
+              <TextInput
+                style={styles.input}
+                placeholder="Enter your password"
+                placeholderTextColor="#94a3b8"
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry
+              />
+            </View>
+          </View>
+
+          {isSignUp && (
+            <View style={styles.inputWrapper}>
+              <Text style={styles.inputLabel}>Confirm Password</Text>
+              <View style={styles.inputContainer}>
+                <MaterialIcons name="lock" size={20} color="#94a3b8" />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Confirm your password"
+                  placeholderTextColor="#94a3b8"
+                  value={confirmPassword}
+                  onChangeText={setConfirmPassword}
+                  secureTextEntry
+                />
+              </View>
+            </View>
+          )}
+        </View>
+
+        {!isSignUp && (
+          <TouchableOpacity style={styles.forgotPassword}>
+            <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
+          </TouchableOpacity>
+        )}
+
+        <TouchableOpacity style={styles.submitButton}>
+          <LinearGradient
+            colors={['#ff6b6b', '#ff8787']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.gradient}
+          >
+            <Text style={styles.submitButtonText}>
+              {isSignUp ? 'Create Account' : 'Sign In'}
+            </Text>
+          </LinearGradient>
+        </TouchableOpacity>
+
+        <View style={styles.dividerContainer}>
+          <View style={styles.divider} />
+          <Text style={styles.dividerText}>Or continue with</Text>
+          <View style={styles.divider} />
+        </View>
+
+        <View style={styles.socialButtonsContainer}>
           <TouchableOpacity style={styles.socialButton}>
             <Image
-              source={require('../assets/images/google.png')} // Add your Google icon
-              style={styles.socialIcon1}
+              source={require('../assets/images/google.png')}
+              style={styles.socialIcon}
+              resizeMode="contain"
             />
           </TouchableOpacity>
           <TouchableOpacity style={styles.socialButton}>
             <Image
-              source={require('../assets/images/facebook.png')} // Add your Facebook icon
-              style={styles.socialIcon2}
+              source={require('../assets/images/facebook.png')}
+              style={styles.socialIcon}
+              resizeMode="contain"
             />
           </TouchableOpacity>
         </View>
+
+        <TouchableOpacity 
+          style={styles.toggleContainer}
+          onPress={() => setIsSignUp(!isSignUp)}
+        >
+          <Text style={styles.toggleText}>
+            {isSignUp 
+              ? 'Already have an account? ' 
+              : "Don't have an account? "}
+            <Text style={styles.toggleTextBold}>
+              {isSignUp ? 'Sign In' : 'Sign Up'}
+            </Text>
+          </Text>
+        </TouchableOpacity>
       </View>
     </ScrollView>
   );
@@ -124,94 +175,154 @@ const SignInSignUpPage = ({ /* navigation */}) => {
 
 const styles = StyleSheet.create({
   container: {
-    flexGrow: 1,
+    flex: 1,
+    backgroundColor: '#fff',
+  },
+  headerSection: {
+    height: 140,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f8f9fa', // Light gray background
-    paddingHorizontal: 20,
-    paddingVertical: 40,
   },
   logo: {
-    width: 100,
-    height: 30,
-    borderRadius: 20,
+    width: 120,
+    height: 40,
+    borderRadius: 20,  // Half of height for full curve
+    overflow: 'hidden',  // Ensures the image respects the border radius
+    backgroundColor: 'white',  // Optional: adds background if logo has transparency
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+    padding: 5,  // Adds some padding inside the container
+  },
+  formSection: {
+    flex: 1,
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
+    marginTop: -20,
+    paddingHorizontal: 24,
+    paddingTop: 30,
+  },
+  welcomeContainer: {
     marginBottom: 30,
   },
-  title: {
-    fontSize: 24,
+  welcomeText: {
+    fontSize: 28,
     fontWeight: 'bold',
-    color: '#333',
+    color: '#1e293b',
+    marginBottom: 8,
+  },
+  subtitleText: {
+    fontSize: 16,
+    color: '#64748b',
+  },
+  inputsContainer: {
     marginBottom: 20,
+  },
+  inputWrapper: {
+    marginBottom: 20,
+  },
+  inputLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#475569',
+    marginBottom: 8,
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    width: '100%',
+    backgroundColor: '#f8fafc',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    paddingHorizontal: 16,
+    height: 50,
+  },
+  input: {
+    flex: 1,
+    marginLeft: 12,
+    fontSize: 16,
+    color: '#0f172a',
+  },
+  forgotPassword: {
+    alignSelf: 'flex-end',
+    marginBottom: 30,
+  },
+  forgotPasswordText: {
+    color: '#ff6b6b',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  submitButton: {
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginBottom: 30,
+    shadowColor: '#ff6b6b',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  gradient: {
+    paddingVertical: 16,
+  },
+  submitButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+  dividerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 30,
+  },
+  divider: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#e2e8f0',
+  },
+  dividerText: {
+    marginHorizontal: 16,
+    color: '#64748b',
+    fontSize: 14,
+  },
+  socialButtonsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 20,
+    marginBottom: 30,
+  },
+  socialButton: {
+    width: 50,
+    height: 50,
+    borderRadius: 12,
     backgroundColor: '#fff',
-    borderRadius: 10,
-    paddingHorizontal: 15,
-    paddingVertical: 10,
-    marginBottom: 15,
+    justifyContent: 'center',
+    alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
   },
-  input: {
-    flex: 1,
-    marginLeft: 10,
-    fontSize: 16,
-    color: '#333',
+  socialIcon: {
+    width: 24,
+    height: 24,
   },
-  forgotPassword: {
-    fontSize: 14,
-    color: '#4a4a4a',
-    marginBottom: 20,
-    textDecorationLine: 'underline',
-  },
-  button: {
-    width: '100%',
-    backgroundColor: '#ff6b6b', // Red color from home screen
-    borderRadius: 10,
-    paddingVertical: 15,
+  toggleContainer: {
     alignItems: 'center',
-    marginBottom: 20,
-  },
-  buttonText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#fff',
+    marginBottom: 30,
   },
   toggleText: {
     fontSize: 14,
-    color: '#4a4a4a',
-    marginBottom: 20,
+    color: '#64748b',
   },
-  socialLoginContainer: {
-    alignItems: 'center',
-  },
-  socialLoginText: {
-    fontSize: 15,
-    color: '#4a4a4a',
-    marginBottom: 10,
-  },
-  socialButtons: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-  },
-  socialButton: {
-    marginHorizontal: 10,
-  },
-  socialIcon1: {
-    marginTop: 4,
-    width: 35,
-    height: 35,
-  },
-  socialIcon2: {
-
-    width: 40,
-    height: 40,
+  toggleTextBold: {
+    color: '#ff6b6b',
+    fontWeight: '600',
   },
 });
 
