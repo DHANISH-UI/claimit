@@ -9,8 +9,8 @@ export default function Index() {
   return (
     // Choose one component to render
     //<HomePage />
-    <SignInSignUpPage />
+    //<SignInSignUpPage />
     //<Found />
-    //<Lost />
+    <Lost />
   );
 }

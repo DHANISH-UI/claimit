@@ -7,9 +7,49 @@ import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import MapView, { Marker } from 'react-native-maps';
 import * as Location from 'expo-location';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
-// Location Modal Component
-const LocationModal = ({ 
+type RootStackParamList = {
+  Home: undefined;
+  Lost: undefined;
+  Found: undefined;
+  SignInSignUp: undefined;
+};
+
+type LostScreenNavigationProp = NativeStackNavigationProp<
+  RootStackParamList,
+  'Lost'
+>;
+
+type LocationModalProps = {
+  visible: boolean;
+  onClose: () => void;
+  searchQuery: string;
+  onSearchChange: (text: string) => void;
+  onSearch: () => void;
+  onCurrentLocation: () => void;
+};
+
+type Location = {
+  latitude: number;
+  longitude: number;
+  latitudeDelta: number;
+  longitudeDelta: number;
+};
+
+type Coordinate = {
+  latitude: number;
+  longitude: number;
+};
+
+type ImageInfo = {
+  uri: string;
+  assets?: Array<{ uri: string }>;
+  canceled?: boolean;
+};
+
+const LocationModal: React.FC<LocationModalProps> = ({ 
   visible, 
   onClose, 
   searchQuery, 
@@ -73,18 +113,19 @@ const LocationModal = ({
   </Modal>
 );
 
-const LostItemPage = () => {
+const LostItemPage: React.FC = () => {
+  const navigation = useNavigation<LostScreenNavigationProp>();
   const [itemName, setItemName] = useState('');
   const [category, setCategory] = useState('');
   const [description, setDescription] = useState('');
   const [date, setDate] = useState('');
   const [contactDetails, setContactDetails] = useState('');
-  const [photos, setPhotos] = useState([]);
-  const [location, setLocation] = useState(null);
-  const [selectedLocation, setSelectedLocation] = useState(null);
+  const [photos, setPhotos] = useState<string[]>([]);
+  const [location, setLocation] = useState<Location | null>(null);
+  const [selectedLocation, setSelectedLocation] = useState<Coordinate | null>(null);
   const [locationModalVisible, setLocationModalVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const mapRef = useRef(null);
+  const mapRef = useRef<MapView | null>(null);
 
   const categories = ['Electronics', 'Gadgets', 'Clothing', 'Documents', 'Wallet', 'Keys', 'Other'];
 
@@ -116,42 +157,44 @@ const LostItemPage = () => {
   };
 
   const capturePhoto = async () => {
-    const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== "granted") {
-      Alert.alert("Permission Denied", "Camera access is required.");
-      return;
-    }
-
-    let result = await ImagePicker.launchCameraAsync({
+    const result = await ImagePicker.launchCameraAsync({
       allowsEditing: true,
       aspect: [4, 3],
       quality: 1,
-    });
+    }) as ImageInfo;
 
-    if (!result.canceled) {
+    if (!result.canceled && result.assets) {
       setPhotos([...photos, result.assets[0].uri]);
     }
   };
 
   const pickFromGallery = async () => {
-    let result = await ImagePicker.launchImageLibraryAsync({
+    const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
       aspect: [4, 3],
       quality: 1,
-    });
+    }) as ImageInfo;
 
-    if (!result.canceled) {
+    if (!result.canceled && result.assets) {
       setPhotos([...photos, result.assets[0].uri]);
     }
   };
 
-  const removePhoto = (index) => {
-    setPhotos(photos.filter((_, i) => i !== index));
+  const removePhoto = (index: number) => {
+    const newPhotos = [...photos];
+    newPhotos.splice(index, 1);
+    setPhotos(newPhotos);
   };
 
-  const handleMapPress = (event) => {
-    setSelectedLocation(event.nativeEvent.coordinate);
+  const handleMapPress = (event: any) => {
+    const coordinate = event.nativeEvent.coordinate as Coordinate;
+    setSelectedLocation(coordinate);
+    setLocation({
+      ...coordinate,
+      latitudeDelta: 0.01,
+      longitudeDelta: 0.01,
+    });
   };
 
   const handleLocationPress = () => {
@@ -179,7 +222,7 @@ const LostItemPage = () => {
         };
 
         setLocation(newLocation);
-        setSelectedLocation(newLocation);
+        setSelectedLocation({ latitude, longitude });
         setLocationModalVisible(false);
         setSearchQuery('');
 
@@ -197,6 +240,12 @@ const LostItemPage = () => {
 
   const handleCurrentLocation = async () => {
     try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Denied', 'Please enable location permissions to use this feature.');
+        return;
+      }
+
       const currentLocation = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.High
       });
@@ -209,14 +258,22 @@ const LostItemPage = () => {
       };
       
       setLocation(newLocation);
-      setSelectedLocation(newLocation);
+      setSelectedLocation({
+        latitude: currentLocation.coords.latitude,
+        longitude: currentLocation.coords.longitude
+      });
       setLocationModalVisible(false);
+
+      if (mapRef.current) {
+        mapRef.current.animateToRegion(newLocation, 1000);
+      }
     } catch (error) {
+      console.error('Location error:', error);
       Alert.alert('Error', 'Failed to get current location. Please check your location settings.');
     }
   };
 
-  const handleSearchChange = useCallback((text) => {
+  const handleSearchChange = useCallback((text: string) => {
     setSearchQuery(text);
   }, []);
 

@@ -7,8 +7,49 @@ import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import MapView, { Marker } from 'react-native-maps';
 import * as Location from 'expo-location';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
-const LocationModal = ({ 
+type RootStackParamList = {
+  Home: undefined;
+  Found: undefined;
+  Lost: undefined;
+  SignInSignUp: undefined;
+};
+
+type FoundScreenNavigationProp = NativeStackNavigationProp<
+  RootStackParamList,
+  'Found'
+>;
+
+type LocationModalProps = {
+  visible: boolean;
+  onClose: () => void;
+  searchQuery: string;
+  onSearchChange: (text: string) => void;
+  onSearch: () => void;
+  onCurrentLocation: () => void;
+};
+
+type Location = {
+  latitude: number;
+  longitude: number;
+  latitudeDelta: number;
+  longitudeDelta: number;
+};
+
+type Coordinate = {
+  latitude: number;
+  longitude: number;
+};
+
+type ImageInfo = {
+  uri: string;
+  assets?: Array<{ uri: string }>;
+  canceled?: boolean;
+};
+
+const LocationModal: React.FC<LocationModalProps> = ({ 
   visible, 
   onClose, 
   searchQuery, 
@@ -72,18 +113,19 @@ const LocationModal = ({
   </Modal>
 );
 
-const FoundItemPage = () => {
+const FoundItemPage: React.FC = () => {
+  const navigation = useNavigation<FoundScreenNavigationProp>();
   const [itemName, setItemName] = useState('');
   const [category, setCategory] = useState('');
   const [description, setDescription] = useState('');
   const [date, setDate] = useState('');
   const [contactDetails, setContactDetails] = useState('');
-  const [photos, setPhotos] = useState([]);
-  const [location, setLocation] = useState(null);
-  const [selectedLocation, setSelectedLocation] = useState(null);
+  const [photos, setPhotos] = useState<string[]>([]);
+  const [location, setLocation] = useState<Location | null>(null);
+  const [selectedLocation, setSelectedLocation] = useState<Coordinate | null>(null);
   const [locationModalVisible, setLocationModalVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const mapRef = useRef(null);
+  const mapRef = useRef<MapView | null>(null);
 
   const categories = ['Electronics', 'Gadgets', 'Clothing', 'Documents', 'Wallet', 'Keys', 'Other'];
 
@@ -102,55 +144,21 @@ const FoundItemPage = () => {
     })();
   }, []);
 
-  const handlePhotoUpload = () => {
-    Alert.alert(
-      "Upload Photo",
-      "Choose an option",
-      [
-        { text: "Take Photo", onPress: capturePhoto },
-        { text: "Choose from Gallery", onPress: pickFromGallery },
-        { text: "Cancel", style: "cancel" }
-      ]
-    );
-  };
-
-  const capturePhoto = async () => {
-    const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== "granted") {
-      Alert.alert("Permission Denied", "Camera access is required.");
-      return;
-    }
-
-    let result = await ImagePicker.launchCameraAsync({
-      allowsEditing: true,
-      aspect: [4, 3],
-      quality: 1,
-    });
-
-    if (!result.canceled) {
-      setPhotos([...photos, result.assets[0].uri]);
-    }
-  };
-
-  const pickFromGallery = async () => {
-    let result = await ImagePicker.launchImageLibraryAsync({
+  const handlePhotoUpload = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
       aspect: [4, 3],
       quality: 1,
-    });
+    }) as ImageInfo;
 
-    if (!result.canceled) {
+    if (!result.canceled && result.assets) {
       setPhotos([...photos, result.assets[0].uri]);
     }
   };
 
-  const removePhoto = (index) => {
-    setPhotos(photos.filter((_, i) => i !== index));
-  };
-
-  const handleMapPress = (event) => {
-    const coordinate = event.nativeEvent.coordinate;
+  const handleMapPress = (event: any) => {
+    const coordinate = event.nativeEvent.coordinate as Coordinate;
     setSelectedLocation(coordinate);
     setLocation({
       ...coordinate,
@@ -184,7 +192,7 @@ const FoundItemPage = () => {
         };
 
         setLocation(newLocation);
-        setSelectedLocation({ latitude, longitude });
+        setSelectedLocation(newLocation);
         setLocationModalVisible(false);
         setSearchQuery('');
 
@@ -202,12 +210,6 @@ const FoundItemPage = () => {
 
   const handleCurrentLocation = async () => {
     try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Permission Denied', 'Please enable location permissions to use this feature.');
-        return;
-      }
-
       const currentLocation = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.High
       });
@@ -220,17 +222,9 @@ const FoundItemPage = () => {
       };
       
       setLocation(newLocation);
-      setSelectedLocation({
-        latitude: currentLocation.coords.latitude,
-        longitude: currentLocation.coords.longitude
-      });
+      setSelectedLocation(newLocation);
       setLocationModalVisible(false);
-
-      if (mapRef.current) {
-        mapRef.current.animateToRegion(newLocation, 1000);
-      }
     } catch (error) {
-      console.error('Location error:', error);
       Alert.alert('Error', 'Failed to get current location. Please check your location settings.');
     }
   };
@@ -251,7 +245,7 @@ const FoundItemPage = () => {
     setLocation(null);
   };
 
-  const handleSearchChange = useCallback((text) => {
+  const handleSearchChange = useCallback((text: string) => {
     setSearchQuery(text);
   }, []);
 
@@ -387,8 +381,6 @@ const styles = StyleSheet.create({
    
     borderTopLeftRadius: 30,
     borderBottomRightRadius: 30,
-    //borderTopRightRadius: 30,
-    //borderBottomLeftRadius: 30,
     marginBottom: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },

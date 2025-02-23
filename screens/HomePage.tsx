@@ -3,11 +3,28 @@ import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView, Dimensions
 import { MaterialIcons, Ionicons } from '@expo/vector-icons'; // For icons
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+
+// Define navigation type properly
+type RootStackParamList = {
+  Home: undefined;
+  Lost: undefined;
+  Found: undefined;
+  SignInSignUp: undefined;
+};
+
+// Create a proper navigation type
+type HomeScreenNavigationProp = NativeStackNavigationProp<
+  RootStackParamList,
+  'Home'
+>;
 
 const { width } = Dimensions.get('window');
 
 const HomePage = () => {
     const insets = useSafeAreaInsets();
+    const navigation = useNavigation<HomeScreenNavigationProp>();
 
     return (
         <ScrollView 
