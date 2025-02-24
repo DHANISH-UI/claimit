@@ -9,6 +9,10 @@ import MapView, { Marker } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useRouter } from 'expo-router';
+import { supabase } from '@/lib/supabase';
+import { LinearGradient } from 'expo-linear-gradient';
+import { MaterialIcons } from '@expo/vector-icons';
 
 type RootStackParamList = {
   Home: undefined;
@@ -48,6 +52,26 @@ type ImageInfo = {
   assets?: Array<{ uri: string }>;
   canceled?: boolean;
 };
+
+type LostItem = {
+  id: string;
+  created_at: string;
+  user_id: string;
+  item_name: string;
+  category: string;
+  description: string;
+  date_lost: string;
+  contact_details: string;
+  photos: string[];
+  location: {
+    latitude: number;
+    longitude: number;
+  };
+  status: 'active' | 'found' | 'closed';
+  updated_at: string;
+};
+
+const bucketName = 'items-photos';
 
 const LocationModal: React.FC<LocationModalProps> = ({ 
   visible, 
@@ -115,6 +139,7 @@ const LocationModal: React.FC<LocationModalProps> = ({
 
 const LostItemPage: React.FC = () => {
   const navigation = useNavigation<LostScreenNavigationProp>();
+  const router = useRouter();
   const [itemName, setItemName] = useState('');
   const [category, setCategory] = useState('');
   const [description, setDescription] = useState('');
@@ -125,6 +150,7 @@ const LostItemPage: React.FC = () => {
   const [selectedLocation, setSelectedLocation] = useState<Coordinate | null>(null);
   const [locationModalVisible, setLocationModalVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [loading, setLoading] = useState(false);
   const mapRef = useRef<MapView | null>(null);
 
   const categories = ['Electronics', 'Gadgets', 'Clothing', 'Documents', 'Wallet', 'Keys', 'Other'];
@@ -144,40 +170,104 @@ const LostItemPage: React.FC = () => {
     })();
   }, []);
 
-  const handlePhotoUpload = () => {
-    Alert.alert(
-      "Upload Photo",
-      "Choose an option",
-      [
-        { text: "Take Photo", onPress: capturePhoto },
-        { text: "Choose from Gallery", onPress: pickFromGallery },
-        { text: "Cancel", style: "cancel" }
-      ]
-    );
-  };
+  const uploadImage = async (uri: string): Promise<string> => {
+    try {
+      console.log('Starting image upload process...');
+      console.log('Image URI:', uri);
 
-  const capturePhoto = async () => {
-    const result = await ImagePicker.launchCameraAsync({
-      allowsEditing: true,
-      aspect: [4, 3],
-      quality: 1,
-    }) as ImageInfo;
+      // Get current session first
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !session) {
+        console.error('Session error:', sessionError);
+        throw new Error('Authentication required for upload');
+      }
 
-    if (!result.canceled && result.assets) {
-      setPhotos([...photos, result.assets[0].uri]);
+      // Get file info and type
+      const response = await fetch(uri);
+      const blob = await response.blob();
+      const fileType = blob.type;
+      console.log('File type:', fileType);
+
+      // Get file extension
+      const fileExt = fileType.split('/')[1] || 'jpg';
+      console.log('File extension:', fileExt);
+
+      // Generate unique filename
+      const timestamp = Date.now();
+      const randomString = Math.random().toString(36).substring(7);
+      const fileName = `lost/${session.user.id}/${timestamp}_${randomString}.${fileExt}`;
+      console.log('Generated filename:', fileName);
+
+      // Convert to Uint8Array for upload
+      const arrayBuffer = await blob.arrayBuffer();
+      const uint8Array = new Uint8Array(arrayBuffer);
+
+      console.log('Starting upload to Supabase storage...');
+      const { error: uploadError, data: uploadData } = await supabase.storage
+        .from('lost-items-photos')
+        .upload(fileName, uint8Array, {
+          contentType: fileType,
+          cacheControl: '3600',
+          upsert: false
+        });
+
+      if (uploadError) {
+        console.error('Upload error:', uploadError);
+        throw new Error(`Upload failed: ${uploadError.message}`);
+      }
+
+      console.log('Upload successful:', uploadData);
+
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('lost-items-photos')
+        .getPublicUrl(fileName);
+
+      console.log('Generated public URL:', publicUrl);
+      return publicUrl;
+
+    } catch (error: any) {
+      console.error('Upload error details:', error);
+      throw new Error(error?.message || 'Failed to upload image');
     }
   };
 
-  const pickFromGallery = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [4, 3],
-      quality: 1,
-    }) as ImageInfo;
+  const handlePhotoUpload = async () => {
+    try {
+      console.log('Starting photo selection process...');
+      
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+        base64: true,
+      });
 
-    if (!result.canceled && result.assets) {
-      setPhotos([...photos, result.assets[0].uri]);
+      console.log('Image picker result:', {
+        cancelled: result.canceled,
+        assets: result.assets ? result.assets.length : 0
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const selectedAsset = result.assets[0];
+        console.log('Selected image details:', {
+          uri: selectedAsset.uri,
+          type: selectedAsset.type,
+          width: selectedAsset.width,
+          height: selectedAsset.height,
+          fileSize: selectedAsset.fileSize,
+        });
+        
+        setPhotos([...photos, selectedAsset.uri]);
+        console.log('Updated photos array length:', photos.length + 1);
+      } else {
+        console.log('No image selected or picker cancelled');
+      }
+    } catch (error) {
+      console.error('Photo selection error:', error);
+      console.error('Error details:', JSON.stringify(error, null, 2));
+      Alert.alert('Error', 'Failed to select photo. Please try again.');
     }
   };
 
@@ -283,20 +373,211 @@ const LostItemPage: React.FC = () => {
     Keyboard.dismiss();
   }, []);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
+    console.log('Starting form submission process...');
+    console.log('Validating form fields...');
+    
+    // Validate all required fields
     if (!itemName || !category || !description || !date || !contactDetails || photos.length === 0 || !selectedLocation) {
+      console.log('Form validation failed:', {
+        hasItemName: !!itemName,
+        hasCategory: !!category,
+        hasDescription: !!description,
+        hasDate: !!date,
+        hasContactDetails: !!contactDetails,
+        photoCount: photos.length,
+        hasLocation: !!selectedLocation
+      });
       Alert.alert('Error', 'Please fill all fields, upload a photo, and select a location.');
       return;
     }
-    Alert.alert('Success', 'Lost item posted successfully!');
-    setItemName('');
-    setCategory('');
-    setDescription('');
-    setDate('');
-    setContactDetails('');
-    setPhotos([]);
-    setSelectedLocation(null);
-    setLocation(null);
+
+    console.log('Form validation passed');
+
+    try {
+      setLoading(true);
+      console.log('Checking authentication status...');
+
+      // Check authentication
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) {
+        console.error('Session error:', sessionError);
+        throw new Error('Authentication check failed: ' + sessionError.message);
+      }
+      if (!session) {
+        console.error('No active session found');
+        throw new Error('Please sign in to report a lost item');
+      }
+
+      console.log('Authentication successful');
+      console.log('User ID:', session.user.id);
+      console.log('User email:', session.user.email);
+
+      // Upload photos and get their URLs
+      console.log('Starting photo upload process...');
+      const photoUrls = [];
+      for (const [index, photo] of photos.entries()) {
+        try {
+          console.log(`Uploading photo ${index + 1}/${photos.length}...`);
+          const url = await uploadImage(photo);
+          photoUrls.push(url);
+          console.log(`Photo ${index + 1} uploaded successfully:`, url);
+        } catch (error) {
+          console.error(`Error uploading photo ${index + 1}:`, error);
+          throw new Error(`Failed to upload photo ${index + 1}. Please try again.`);
+        }
+      }
+      console.log('All photos uploaded successfully');
+
+      // Prepare location data
+      console.log('Preparing location data...');
+      const locationData = {
+        latitude: selectedLocation.latitude,
+        longitude: selectedLocation.longitude,
+      };
+      console.log('Location data:', locationData);
+
+      // Validate and format date
+      console.log('Validating and formatting date...');
+      const dateObj = new Date(date);
+      if (isNaN(dateObj.getTime())) {
+        throw new Error('Invalid date format. Please use YYYY-MM-DD format.');
+      }
+      const formattedDate = dateObj.toISOString().split('T')[0];
+      console.log('Formatted date:', formattedDate);
+
+      // Validate category
+      if (!categories.includes(category)) {
+        throw new Error('Invalid category selected.');
+      }
+
+      // Prepare the item data
+      const lostItemData: Omit<LostItem, 'id' | 'created_at' | 'updated_at'> = {
+        user_id: session.user.id,
+        item_name: itemName.trim(),
+        category: category.trim(),
+        description: description.trim(),
+        date_lost: formattedDate,
+        contact_details: contactDetails.trim(),
+        photos: photoUrls,
+        location: locationData,
+        status: 'active'
+      };
+
+      console.log('Prepared lost item data:', JSON.stringify(lostItemData, null, 2));
+
+      // Insert into Supabase
+      try {
+        console.log('Attempting to insert data into Supabase...');
+        
+        // First, check if the table exists and has the correct structure
+        const { error: tableCheckError } = await supabase
+          .from('lost')
+          .select(`
+            id,
+            created_at,
+            user_id,
+            item_name,
+            category,
+            description,
+            date_lost,
+            contact_details,
+            photos,
+            location,
+            status,
+            updated_at
+          `)
+          .limit(1);
+
+        if (tableCheckError) {
+          console.error('Table check error:', tableCheckError);
+          if (tableCheckError.code === '42P01') {
+            throw new Error('The lost items table does not exist. Please run the table creation SQL first.');
+          } else if (tableCheckError.code === '42703') {
+            throw new Error('The lost items table structure is incorrect. Please verify the table schema.');
+          }
+        }
+
+        // Proceed with insert
+        const { data, error } = await supabase
+          .from('lost')
+          .insert([lostItemData])
+          .select();
+
+        console.log('Supabase response:', { data, error });
+
+        if (error) {
+          console.error('Supabase error:', {
+            message: error.message,
+            details: error.details,
+            hint: error.hint,
+            code: error.code
+          });
+
+          // Handle specific error cases
+          switch (error.code) {
+            case '42P01':
+              throw new Error('Lost items table not found. Please create the table first.');
+            case '23505':
+              throw new Error('This item has already been reported.');
+            case '23503':
+              throw new Error('User account not found. Please sign in again.');
+            case '42703':
+              throw new Error('Database schema mismatch. Please check the table structure.');
+            default:
+              throw new Error(error.message || 'Failed to save item details. Please try again.');
+          }
+        }
+
+        if (!data || data.length === 0) {
+          console.error('No data returned from insert operation');
+          throw new Error('Failed to save item details: No data returned');
+        }
+
+        console.log('Lost item saved successfully:', JSON.stringify(data, null, 2));
+
+        Alert.alert(
+          'Success', 
+          'Lost item posted successfully!',
+          [{ text: 'OK', onPress: () => {
+            console.log('Navigating back...');
+            router.back();
+          }}]
+        );
+
+        // Reset form
+        console.log('Resetting form...');
+        setItemName('');
+        setCategory('');
+        setDescription('');
+        setDate('');
+        setContactDetails('');
+        setPhotos([]);
+        setSelectedLocation(null);
+        setLocation(null);
+        console.log('Form reset complete');
+
+      } catch (dbError: any) {
+        console.error('Database operation error:', dbError);
+        console.error('Error stack:', dbError?.stack);
+        console.error('Error details:', {
+          name: dbError?.name,
+          code: dbError?.code,
+          message: dbError?.message
+        });
+        throw new Error(`Database error: ${dbError?.message || 'Unknown database error'}`);
+      }
+
+    } catch (error) {
+      console.error('Submission error:', error);
+      console.error('Full error object:', JSON.stringify(error, null, 2));
+      const errorMessage = error instanceof Error ? error.message : 'Failed to submit lost item. Please try again.';
+      console.error('Final error message:', errorMessage);
+      Alert.alert('Error', errorMessage);
+    } finally {
+      console.log('Submission process completed');
+      setLoading(false);
+    }
   };
 
   return (
@@ -396,8 +677,53 @@ const LostItemPage: React.FC = () => {
           )}
         </View>
 
-        <TouchableOpacity style={styles.submitButton} onPress={handleSubmit}>
-          <Text style={styles.submitButtonText}>Submit Report</Text>
+        {/* Police Report Section */}
+        <View style={styles.sectionContainer}>
+          <Text style={styles.sectionTitle}>Report to Authorities</Text>
+          <Text style={styles.reportDescription}>
+            Lost a valuable item? File a police report for additional security and documentation.
+          </Text>
+          <TouchableOpacity 
+            style={styles.reportButton}
+            onPress={() => Alert.alert(
+              'Contact Authorities',
+              'Would you like to file a police report for this lost item?',
+              [
+                {
+                  text: 'Call Police',
+                  onPress: () => {
+                    // This would typically use Linking to make a phone call
+                    Alert.alert('Connecting', 'Redirecting to emergency services...');
+                  },
+                  style: 'default'
+                },
+                {
+                  text: 'Cancel',
+                  style: 'cancel'
+                }
+              ]
+            )}
+          >
+            <LinearGradient
+              colors={['#1e40af', '#1e3a8a']}
+              style={styles.reportButtonGradient}
+            >
+              <View style={styles.reportButtonContent}>
+                <MaterialIcons name="local-police" size={24} color="#fff" />
+                <Text style={styles.reportButtonText}>File Police Report</Text>
+              </View>
+            </LinearGradient>
+          </TouchableOpacity>
+        </View>
+
+        <TouchableOpacity 
+          style={[styles.submitButton, loading && styles.disabledButton]} 
+          onPress={handleSubmit}
+          disabled={loading}
+        >
+          <Text style={styles.submitButtonText}>
+            {loading ? 'Submitting...' : 'Submit Report'}
+          </Text>
         </TouchableOpacity>
       </View>
 
@@ -651,6 +977,38 @@ const styles = StyleSheet.create({
     marginVertical: 10,
     borderRadius: 8,
     overflow: 'hidden',
+  },
+  disabledButton: {
+    backgroundColor: '#ccc',
+  },
+  reportDescription: {
+    fontSize: 14,
+    color: '#64748b',
+    marginBottom: 15,
+    lineHeight: 20,
+  },
+  reportButton: {
+    borderRadius: 12,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  reportButtonGradient: {
+    padding: 16,
+  },
+  reportButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+  },
+  reportButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
 

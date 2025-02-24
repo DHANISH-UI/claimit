@@ -8,29 +8,127 @@ import {
   Image,
   ScrollView,
   Platform,
-  Dimensions
+  Dimensions,
+  Alert
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons'; // For icons
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
+import { supabase } from '../lib/supabase';
 
 const { width } = Dimensions.get('window');
 
-const SignInSignUpPage = ({ /* navigation */}) => {
+const SignInSignUpPage: React.FC = () => {
+  const router = useRouter();
   const [isSignUp, setIsSignUp] = useState(false); // Toggle between Sign In and Sign Up
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [loading, setLoading] = useState(false);
   const insets = useSafeAreaInsets();
 
-  const handleSignIn = () => {
-    // Add your sign-in logic here
-    console.log('Sign In:', email, password);
+  const handleSignIn = async () => {
+    console.log('Starting sign in process...');
+    console.log('Email:', email);
+    console.log('Password length:', password.length);
+
+    if (!email || !password) {
+      console.log('Sign in validation failed: Missing fields');
+      Alert.alert('Error', 'Please fill in all fields');
+      return;
+    }
+
+    try {
+      console.log('Setting loading state...');
+      setLoading(true);
+
+      console.log('Attempting to sign in with Supabase...');
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      console.log('Supabase response received');
+      console.log('Data:', JSON.stringify(data, null, 2));
+      if (error) {
+        console.error('Supabase error:', error);
+        throw error;
+      }
+
+      if (data.user) {
+        console.log('Sign in successful. User:', data.user.id);
+        console.log('Session:', data.session?.access_token ? 'Present' : 'Missing');
+        router.replace('/');
+      } else {
+        console.log('No user data received');
+        Alert.alert('Error', 'No user data received');
+      }
+    } catch (error: any) {
+      console.error('Sign in error:', error);
+      console.error('Error details:', JSON.stringify(error, null, 2));
+      Alert.alert('Error', error.message || 'An error occurred during sign in');
+    } finally {
+      console.log('Sign in process completed');
+      setLoading(false);
+    }
   };
 
-  const handleSignUp = () => {
-    // Add your sign-up logic here
-    console.log('Sign Up:', email, password, confirmPassword);
+  const handleSignUp = async () => {
+    console.log('Starting sign up process...');
+    console.log('Email:', email);
+    console.log('Password length:', password.length);
+    console.log('Confirm password length:', confirmPassword.length);
+
+    if (!email || !password || !confirmPassword) {
+      console.log('Sign up validation failed: Missing fields');
+      Alert.alert('Error', 'Please fill in all fields');
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      console.log('Sign up validation failed: Passwords do not match');
+      Alert.alert('Error', 'Passwords do not match');
+      return;
+    }
+
+    try {
+      console.log('Setting loading state...');
+      setLoading(true);
+
+      console.log('Attempting to sign up with Supabase...');
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+      });
+
+      console.log('Supabase response received');
+      console.log('Data:', JSON.stringify(data, null, 2));
+      if (error) {
+        console.error('Supabase error:', error);
+        throw error;
+      }
+
+      if (data.user) {
+        console.log('Sign up successful. User:', data.user.id);
+        console.log('Email confirmation status:', data.user.confirmed_at ? 'Confirmed' : 'Pending');
+        Alert.alert(
+          'Success', 
+          'Registration successful! Please check your email for verification.',
+          [{ text: 'OK', onPress: () => setIsSignUp(false) }]
+        );
+      } else {
+        console.log('No user data received');
+        Alert.alert('Error', 'No user data received');
+      }
+    } catch (error: any) {
+      console.error('Sign up error:', error);
+      console.error('Error details:', JSON.stringify(error, null, 2));
+      Alert.alert('Error', error.message || 'An error occurred during sign up');
+    } finally {
+      console.log('Sign up process completed');
+      setLoading(false);
+    }
   };
 
   return (
@@ -119,7 +217,11 @@ const SignInSignUpPage = ({ /* navigation */}) => {
           </TouchableOpacity>
         )}
 
-        <TouchableOpacity style={styles.submitButton}>
+        <TouchableOpacity 
+          style={[styles.submitButton, loading && styles.disabledButton]}
+          onPress={isSignUp ? handleSignUp : handleSignIn}
+          disabled={loading}
+        >
           <LinearGradient
             colors={['#ff6b6b', '#ff8787']}
             start={{ x: 0, y: 0 }}
@@ -127,7 +229,12 @@ const SignInSignUpPage = ({ /* navigation */}) => {
             style={styles.gradient}
           >
             <Text style={styles.submitButtonText}>
-              {isSignUp ? 'Create Account' : 'Sign In'}
+              {loading 
+                ? 'Loading...' 
+                : isSignUp 
+                  ? 'Create Account' 
+                  : 'Sign In'
+              }
             </Text>
           </LinearGradient>
         </TouchableOpacity>
@@ -186,15 +293,24 @@ const styles = StyleSheet.create({
   logo: {
     width: 120,
     height: 40,
-    borderRadius: 20,  // Half of height for full curve
-    overflow: 'hidden',  // Ensures the image respects the border radius
-    backgroundColor: 'white',  // Optional: adds background if logo has transparency
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-    padding: 5,  // Adds some padding inside the container
+    borderRadius: 20,
+    overflow: 'hidden',
+    backgroundColor: 'white',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 3,
+      },
+      web: {
+        boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.1)',
+      },
+    }),
+    padding: 5,
   },
   formSection: {
     flex: 1,
@@ -259,11 +375,20 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     overflow: 'hidden',
     marginBottom: 30,
-    shadowColor: '#ff6b6b',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 5,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#ff6b6b',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.2,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 5,
+      },
+      web: {
+        boxShadow: '0px 4px 8px rgba(255, 107, 107, 0.2)',
+      },
+    }),
   },
   gradient: {
     paddingVertical: 16,
@@ -302,11 +427,20 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 3,
+      },
+      web: {
+        boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.1)',
+      },
+    }),
   },
   socialIcon: {
     width: 24,
@@ -323,6 +457,9 @@ const styles = StyleSheet.create({
   toggleTextBold: {
     color: '#ff6b6b',
     fontWeight: '600',
+  },
+  disabledButton: {
+    opacity: 0.7,
   },
 });
 

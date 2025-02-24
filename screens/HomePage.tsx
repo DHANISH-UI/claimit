@@ -5,6 +5,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useRouter } from 'expo-router';
 
 // Define navigation type properly
 type RootStackParamList = {
@@ -12,6 +13,10 @@ type RootStackParamList = {
   Lost: undefined;
   Found: undefined;
   SignInSignUp: undefined;
+  '/profile': undefined;
+  'profile': undefined;
+  'working': undefined;
+  'notification': undefined;
 };
 
 // Create a proper navigation type
@@ -22,9 +27,20 @@ type HomeScreenNavigationProp = NativeStackNavigationProp<
 
 const { width } = Dimensions.get('window');
 
-const HomePage = () => {
+const HomePage: React.FC = () => {
     const insets = useSafeAreaInsets();
     const navigation = useNavigation<HomeScreenNavigationProp>();
+    const router = useRouter();
+
+    const handleLostPress = () => {
+        console.log('Navigating to Lost page...');
+        router.push('/lost');
+    };
+
+    const handleFoundPress = () => {
+        console.log('Navigating to Found page...');
+        router.push('/found');
+    };
 
     return (
         <ScrollView 
@@ -43,11 +59,17 @@ const HomePage = () => {
                 <View style={styles.navbar}>
                     <Image source={require('../assets/images/logo copy.png')} style={styles.logo} />
                     <View style={styles.navIcons}>
-                        <TouchableOpacity style={styles.iconButton}>
+                        <TouchableOpacity 
+                            style={styles.iconButton}
+                            onPress={() => router.push('notification')}
+                        >
                             <MaterialIcons name="notifications" size={24} color="#fff" />
                             <View style={styles.notificationBadge} />
                         </TouchableOpacity>
-                        <TouchableOpacity style={styles.iconButton}>
+                        <TouchableOpacity 
+                            style={styles.iconButton}
+                            onPress={() => router.push('/profile')}
+                        >
                             <MaterialIcons name="account-circle" size={24} color="#fff" />
                         </TouchableOpacity>
                     </View>
@@ -69,7 +91,10 @@ const HomePage = () => {
                 
                 {/* Lost and Found Buttons */}
                 <View style={styles.buttonContainer}>
-                    <TouchableOpacity style={[styles.actionBox, styles.lostBox]}>
+                    <TouchableOpacity 
+                        style={[styles.actionBox, styles.lostBox]}
+                        onPress={handleLostPress}
+                    >
                         <LinearGradient
                             colors={['#ff6b6b', '#ff8787']}
                             style={styles.boxGradient}
@@ -87,7 +112,10 @@ const HomePage = () => {
                         </LinearGradient>
                     </TouchableOpacity>
 
-                    <TouchableOpacity style={[styles.actionBox, styles.foundBox]}>
+                    <TouchableOpacity 
+                        style={[styles.actionBox, styles.foundBox]}
+                        onPress={handleFoundPress}
+                    >
                         <LinearGradient
                             colors={['#4ecdc4', '#45b7af']}
                             style={styles.boxGradient}
@@ -125,6 +153,85 @@ const HomePage = () => {
                     </View>
                 </View>
 
+                {/* Reviews Section */}
+                <View style={styles.sectionContainer}>
+                    <View style={styles.sectionTitleContainer}>
+                        <MaterialIcons name="star" size={24} color="#2c3e50" />
+                        <Text style={styles.sectionTitle}>User Reviews</Text>
+                    </View>
+                    <ScrollView 
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        style={styles.reviewsScroll}
+                    >
+                        <View style={styles.reviewCard}>
+                            <View style={styles.reviewHeader}>
+                                <MaterialIcons name="account-circle" size={40} color="#2c3e50" />
+                                <View style={styles.reviewerInfo}>
+                                    <Text style={styles.reviewerName}>Almas</Text>
+                                    <View style={styles.ratingContainer}>
+                                        {[1, 2, 3, 4, 5].map((star) => (
+                                            <MaterialIcons 
+                                                key={star} 
+                                                name="star" 
+                                                size={16} 
+                                                color="#ffd700" 
+                                            />
+                                        ))}
+                                    </View>
+                                </View>
+                            </View>
+                            <Text style={styles.reviewText}>
+                                "Found my lost laptop within 24 hours! This app is a lifesaver. The community is incredibly helpful."
+                            </Text>
+                        </View>
+
+                        <View style={styles.reviewCard}>
+                            <View style={styles.reviewHeader}>
+                                <MaterialIcons name="account-circle" size={40} color="#2c3e50" />
+                                <View style={styles.reviewerInfo}>
+                                    <Text style={styles.reviewerName}>Abiram</Text>
+                                    <View style={styles.ratingContainer}>
+                                        {[1, 2, 3, 4, 5].map((star) => (
+                                            <MaterialIcons 
+                                                key={star} 
+                                                name="star" 
+                                                size={16} 
+                                                color="#ffd700" 
+                                            />
+                                        ))}
+                                    </View>
+                                </View>
+                            </View>
+                            <Text style={styles.reviewText}>
+                                "Reunited with my lost phone thanks to this amazing platform. The process was smooth and secure."
+                            </Text>
+                        </View>
+
+                        <View style={styles.reviewCard}>
+                            <View style={styles.reviewHeader}>
+                                <MaterialIcons name="account-circle" size={40} color="#2c3e50" />
+                                <View style={styles.reviewerInfo}>
+                                    <Text style={styles.reviewerName}>Adnan</Text>
+                                    <View style={styles.ratingContainer}>
+                                        {[1, 2, 3, 4].map((star) => (
+                                            <MaterialIcons 
+                                                key={star} 
+                                                name="star" 
+                                                size={16} 
+                                                color="#ffd700" 
+                                            />
+                                        ))}
+                                    </View>
+                                </View>
+                            </View>
+                            <Text style={styles.reviewText}>
+                                "Great community-driven platform. Helped me return a lost wallet to its owner. Very satisfying experience!"
+                            </Text>
+                        </View>
+                    </ScrollView>
+                </View>
+
                 {/* Help Section */}
                 <View style={styles.sectionContainer}>
                     <View style={styles.sectionTitleContainer}>
@@ -141,14 +248,17 @@ const HomePage = () => {
                                 <Text style={styles.helpButtonText}>Chat Support</Text>
                             </LinearGradient>
                         </TouchableOpacity>
-                        <TouchableOpacity style={styles.helpButton}>
-                            <LinearGradient
-                                colors={['#1e293b', '#475569']}
-                                style={styles.helpButtonGradient}
-                            >
-                                <Ionicons name="construct-outline" size={24} color="#fff" />
-                                <Text style={styles.helpButtonText}>Working</Text>
-                            </LinearGradient>
+                        <TouchableOpacity 
+                          style={styles.helpButton}
+                          onPress={() => router.push('/working')}
+                        >
+                          <LinearGradient
+                            colors={['#1e293b', '#475569']}
+                            style={styles.helpButtonGradient}
+                          >
+                            <Ionicons name="construct-outline" size={24} color="#fff" />
+                            <Text style={styles.helpButtonText}>Working</Text>
+                          </LinearGradient>
                         </TouchableOpacity>
                     </View>
                 </View>
@@ -477,6 +587,44 @@ const styles = StyleSheet.create({
         fontSize: 12,
         color: '#64748b',
         textAlign: 'center',
+    },
+    reviewsScroll: {
+        marginTop: 10,
+    },
+    reviewCard: {
+        backgroundColor: '#fff',
+        padding: 15,
+        borderRadius: 15,
+        marginRight: 15,
+        width: width * 0.8,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 3,
+    },
+    reviewHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 10,
+    },
+    reviewerInfo: {
+        marginLeft: 10,
+    },
+    reviewerName: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#2c3e50',
+        marginBottom: 2,
+    },
+    ratingContainer: {
+        flexDirection: 'row',
+    },
+    reviewText: {
+        fontSize: 14,
+        color: '#64748b',
+        lineHeight: 20,
+        fontStyle: 'italic',
     },
 });
 

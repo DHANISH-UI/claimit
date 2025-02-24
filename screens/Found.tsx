@@ -9,6 +9,10 @@ import MapView, { Marker } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useRouter } from 'expo-router';
+import { supabase } from '@/lib/supabase';
+import { LinearGradient } from 'expo-linear-gradient';
+import { MaterialIcons } from '@expo/vector-icons';
 
 type RootStackParamList = {
   Home: undefined;
@@ -115,6 +119,7 @@ const LocationModal: React.FC<LocationModalProps> = ({
 
 const FoundItemPage: React.FC = () => {
   const navigation = useNavigation<FoundScreenNavigationProp>();
+  const router = useRouter();
   const [itemName, setItemName] = useState('');
   const [category, setCategory] = useState('');
   const [description, setDescription] = useState('');
@@ -125,6 +130,7 @@ const FoundItemPage: React.FC = () => {
   const [selectedLocation, setSelectedLocation] = useState<Coordinate | null>(null);
   const [locationModalVisible, setLocationModalVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [loading, setLoading] = useState(false);
   const mapRef = useRef<MapView | null>(null);
 
   const categories = ['Electronics', 'Gadgets', 'Clothing', 'Documents', 'Wallet', 'Keys', 'Other'];
@@ -144,17 +150,159 @@ const FoundItemPage: React.FC = () => {
     })();
   }, []);
 
-  const handlePhotoUpload = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [4, 3],
-      quality: 1,
-    }) as ImageInfo;
+  const uploadImage = async (uri: string): Promise<string> => {
+    try {
+      console.log('Starting image upload process...');
+      console.log('Image URI:', uri);
+      console.log('Platform:', Platform.OS);
 
-    if (!result.canceled && result.assets) {
-      setPhotos([...photos, result.assets[0].uri]);
+      // Get current session first
+      console.log('Getting Supabase session...');
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) {
+        console.error('Session error:', sessionError);
+        throw new Error('Authentication required for upload');
+      }
+      console.log('Session found:', session ? 'Yes' : 'No');
+      console.log('Session user:', session?.user?.id);
+
+      // Get file info
+      const fileInfo = await fetch(uri).then(r => ({
+        size: r.headers.get('content-length'),
+        type: r.headers.get('content-type'),
+      }));
+      console.log('File info:', fileInfo);
+
+      // Get file extension from URI or content type
+      let fileExt = uri.split('.').pop()?.toLowerCase() || 'jpg';
+      if (fileInfo.type) {
+        const matches = fileInfo.type.match(/^image\/(\w+)$/);
+        if (matches) {
+          fileExt = matches[1];
+        }
+      }
+      console.log('Determined file extension:', fileExt);
+
+      // Generate unique filename
+      const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+      const filePath = `found-items/${fileName}`;
+      console.log('Generated file path:', filePath);
+
+      // Read the file as base64
+      console.log('Converting image to base64...');
+      const response = await fetch(uri);
+      const blob = await response.blob();
+      const base64Data = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          if (typeof reader.result === 'string') {
+            // Remove the data URL prefix (e.g., "data:image/jpeg;base64,")
+            const base64 = reader.result.split(',')[1];
+            resolve(base64);
+          } else {
+            reject(new Error('Failed to convert to base64'));
+          }
+        };
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(blob);
+      });
+      console.log('Base64 conversion successful. Length:', base64Data.length);
+
+      // Convert base64 to Uint8Array
+      console.log('Converting base64 to Uint8Array...');
+      const binaryStr = atob(base64Data);
+      const bytes = new Uint8Array(binaryStr.length);
+      for (let i = 0; i < binaryStr.length; i++) {
+        bytes[i] = binaryStr.charCodeAt(i);
+      }
+      console.log('Converted to Uint8Array. Length:', bytes.length);
+
+      // Determine content type
+      const contentType = `image/${fileExt}`;
+      console.log('Content type:', contentType);
+
+      // Upload to Supabase storage
+      console.log('Starting Supabase upload...');
+      const { error: uploadError, data: uploadData } = await supabase.storage
+        .from('items-photos')
+        .upload(filePath, bytes, {
+          contentType,
+          cacheControl: '3600',
+          upsert: false
+        });
+
+      if (uploadError) {
+        console.error('Upload error details:', JSON.stringify(uploadError, null, 2));
+        throw new Error(`Upload failed: ${uploadError.message}`);
+      }
+
+      console.log('Upload successful:', JSON.stringify(uploadData, null, 2));
+
+      // Get the public URL
+      console.log('Getting public URL...');
+      const { data: { publicUrl } } = supabase.storage
+        .from('items-photos')
+        .getPublicUrl(filePath);
+
+      console.log('Public URL generated:', publicUrl);
+      return publicUrl;
+
+    } catch (error: any) {
+      console.error('Detailed upload error:', error);
+      console.error('Error name:', error?.name);
+      console.error('Error type:', error?.constructor?.name);
+      console.error('Error message:', error?.message);
+      console.error('Error stack:', error?.stack);
+      if (error?.cause) {
+        console.error('Error cause:', JSON.stringify(error.cause, null, 2));
+      }
+      throw new Error(error?.message || 'Failed to upload image. Please try again.');
     }
+  };
+
+  const handlePhotoUpload = async () => {
+    try {
+      console.log('Starting photo selection process...');
+      
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+        base64: true,
+      });
+
+      console.log('Image picker result:', {
+        cancelled: result.canceled,
+        assets: result.assets ? result.assets.length : 0
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const selectedAsset = result.assets[0];
+        console.log('Selected image details:', {
+          uri: selectedAsset.uri,
+          type: selectedAsset.type,
+          width: selectedAsset.width,
+          height: selectedAsset.height,
+          fileSize: selectedAsset.fileSize,
+        });
+        
+        setPhotos([...photos, selectedAsset.uri]);
+        console.log('Updated photos array length:', photos.length + 1);
+      } else {
+        console.log('No image selected or picker cancelled');
+      }
+    } catch (error) {
+      console.error('Photo selection error:', error);
+      console.error('Error details:', JSON.stringify(error, null, 2));
+      Alert.alert('Error', 'Failed to select photo. Please try again.');
+    }
+  };
+
+  const removePhoto = (index: number) => {
+    const newPhotos = [...photos];
+    newPhotos.splice(index, 1);
+    setPhotos(newPhotos);
   };
 
   const handleMapPress = (event: any) => {
@@ -229,20 +377,81 @@ const FoundItemPage: React.FC = () => {
     }
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!itemName || !category || !description || !date || !contactDetails || photos.length === 0 || !selectedLocation) {
       Alert.alert('Error', 'Please fill all fields, upload a photo, and select a location.');
       return;
     }
-    Alert.alert('Success', 'Found item posted successfully!');
-    setItemName('');
-    setCategory('');
-    setDescription('');
-    setDate('');
-    setContactDetails('');
-    setPhotos([]);
-    setSelectedLocation(null);
-    setLocation(null);
+
+    try {
+      setLoading(true);
+
+      // Upload photos and get their URLs
+      const photoUrls = [];
+      for (const photo of photos) {
+        try {
+          const url = await uploadImage(photo);
+          photoUrls.push(url);
+        } catch (error) {
+          console.error('Error uploading photo:', error);
+          Alert.alert('Upload Error', 'Failed to upload one or more photos. Please try again.');
+          setLoading(false);
+          return;
+        }
+      }
+
+      // Prepare location data
+      const locationData = {
+        latitude: selectedLocation.latitude,
+        longitude: selectedLocation.longitude,
+      };
+
+      // Format date to ISO string
+      const formattedDate = new Date(date).toISOString().split('T')[0];
+
+      // Insert into Supabase
+      const { data, error } = await supabase
+        .from('found')
+        .insert([
+          {
+            item_name: itemName,
+            category,
+            description,
+            date_found: formattedDate,
+            contact_details: contactDetails,
+            photos: photoUrls,
+            location: locationData,
+          }
+        ])
+        .select();
+
+      if (error) {
+        console.error('Database error:', error);
+        throw new Error('Failed to save item details. Please try again.');
+      }
+
+      Alert.alert(
+        'Success', 
+        'Found item posted successfully!',
+        [{ text: 'OK', onPress: () => router.back() }]
+      );
+
+      // Reset form
+      setItemName('');
+      setCategory('');
+      setDescription('');
+      setDate('');
+      setContactDetails('');
+      setPhotos([]);
+      setSelectedLocation(null);
+      setLocation(null);
+
+    } catch (error) {
+      console.error('Submission error:', error);
+      Alert.alert('Error', error instanceof Error ? error.message : 'Failed to submit found item. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleSearchChange = useCallback((text: string) => {
@@ -352,6 +561,45 @@ const FoundItemPage: React.FC = () => {
           )}
         </View>
 
+        {/* Police Report Section */}
+        <View style={styles.sectionContainer}>
+          <Text style={styles.sectionTitle}>Report to Authorities</Text>
+          <Text style={styles.reportDescription}>
+            Found a high-value item? Report it to local authorities for proper handling.
+          </Text>
+          <TouchableOpacity 
+            style={styles.reportButton}
+            onPress={() => Alert.alert(
+              'Contact Authorities',
+              'Would you like to contact local law enforcement about this item?',
+              [
+                {
+                  text: 'Call Police',
+                  onPress: () => {
+                    // This would typically use Linking to make a phone call
+                    Alert.alert('Connecting', 'Redirecting to emergency services...');
+                  },
+                  style: 'default'
+                },
+                {
+                  text: 'Cancel',
+                  style: 'cancel'
+                }
+              ]
+            )}
+          >
+            <LinearGradient
+              colors={['#1e40af', '#1e3a8a']}
+              style={styles.reportButtonGradient}
+            >
+              <View style={styles.reportButtonContent}>
+                <MaterialIcons name="local-police" size={24} color="#fff" />
+                <Text style={styles.reportButtonText}>Contact Law Enforcement</Text>
+              </View>
+            </LinearGradient>
+          </TouchableOpacity>
+        </View>
+
         <LocationModal 
           visible={locationModalVisible}
           onClose={handleCloseModal}
@@ -361,8 +609,14 @@ const FoundItemPage: React.FC = () => {
           onCurrentLocation={handleCurrentLocation}
         />
 
-        <TouchableOpacity style={styles.submitButton} onPress={handleSubmit}>
-          <Text style={styles.submitButtonText}>Submit Report</Text>
+        <TouchableOpacity 
+          style={[styles.submitButton, loading && styles.disabledButton]} 
+          onPress={handleSubmit}
+          disabled={loading}
+        >
+          <Text style={styles.submitButtonText}>
+            {loading ? 'Submitting...' : 'Submit Report'}
+          </Text>
         </TouchableOpacity>
       </View>
     </ScrollView>
@@ -603,6 +857,38 @@ const styles = StyleSheet.create({
   modalButtonText: {
     color: '#fff',
     fontWeight: 'bold',
+  },
+  disabledButton: {
+    backgroundColor: '#ccc',
+  },
+  reportDescription: {
+    fontSize: 14,
+    color: '#64748b',
+    marginBottom: 15,
+    lineHeight: 20,
+  },
+  reportButton: {
+    borderRadius: 12,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  reportButtonGradient: {
+    padding: 16,
+  },
+  reportButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+  },
+  reportButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
 
