@@ -5,25 +5,25 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useRouter } from 'expo-router';
+import { useRouter, Link } from 'expo-router';
 
 // Define navigation type properly
 type RootStackParamList = {
-  Home: undefined;
-  Lost: undefined;
-  Found: undefined;
-  SignInSignUp: undefined;
-  '/profile': undefined;
-  'profile': undefined;
-  'working': undefined;
-  'notification': undefined;
-  '(screens)/chat-support': undefined;
+  home: undefined;
+  '(screens)': {
+    lost: undefined;
+    found: undefined;
+    profile: undefined;
+    working: undefined;
+    notification: undefined;
+    'chat-support': undefined;
+  };
 };
 
 // Create a proper navigation type
 type HomeScreenNavigationProp = NativeStackNavigationProp<
   RootStackParamList,
-  'Home'
+  'home'
 >;
 
 const { width } = Dimensions.get('window');
@@ -35,12 +35,12 @@ const HomePage: React.FC = () => {
 
     const handleLostPress = () => {
         console.log('Navigating to Lost page...');
-        router.push('/lost');
+        router.push({ pathname: 'lost' });
     };
 
     const handleFoundPress = () => {
         console.log('Navigating to Found page...');
-        router.push('/found');
+        router.push({ pathname: 'found' });
     };
 
     return (
@@ -62,14 +62,14 @@ const HomePage: React.FC = () => {
                     <View style={styles.navIcons}>
                         <TouchableOpacity 
                             style={styles.iconButton}
-                            onPress={() => router.push('/notification')}
+                            onPress={() => router.push({ pathname: 'notification' })}
                         >
                             <MaterialIcons name="notifications" size={24} color="#fff" />
                             <View style={styles.notificationBadge} />
                         </TouchableOpacity>
                         <TouchableOpacity 
                             style={styles.iconButton}
-                            onPress={() => router.push('/profile')}
+                            onPress={() => router.push({ pathname: 'profile' })}
                         >
                             <MaterialIcons name="account-circle" size={24} color="#fff" />
                         </TouchableOpacity>
@@ -213,7 +213,7 @@ const HomePage: React.FC = () => {
                             <View style={styles.reviewHeader}>
                                 <MaterialIcons name="account-circle" size={40} color="#2c3e50" />
                                 <View style={styles.reviewerInfo}>
-                                    <Text style={styles.reviewerName}>Adnan</Text>
+                                    <Text style={styles.reviewerName}>Hana</Text>
                                     <View style={styles.ratingContainer}>
                                         {[1, 2, 3, 4].map((star) => (
                                             <MaterialIcons 
@@ -241,28 +241,28 @@ const HomePage: React.FC = () => {
                     </View>
                     <View style={styles.helpOptions}>
                         <TouchableOpacity 
-                          style={styles.helpButton}
-                          onPress={() => router.push('/(screens)/chat-support')}
+                            style={styles.helpButton}
+                            onPress={() => router.push({ pathname: 'chat-support' })}
                         >
-                          <LinearGradient
-                            colors={['#0f172a', '#334155']}
-                            style={styles.helpButtonGradient}
-                          >
-                            <Ionicons name="chatbubble-ellipses-outline" size={24} color="#fff" />
-                            <Text style={styles.helpButtonText}>Chat Support</Text>
-                          </LinearGradient>
+                            <LinearGradient
+                                colors={['#0f172a', '#334155']}
+                                style={styles.helpButtonGradient}
+                            >
+                                <Ionicons name="chatbubble-ellipses-outline" size={24} color="#fff" />
+                                <Text style={styles.helpButtonText}>Chat Support</Text>
+                            </LinearGradient>
                         </TouchableOpacity>
                         <TouchableOpacity 
-                          style={styles.helpButton}
-                          onPress={() => router.push('/working')}
+                            style={styles.helpButton}
+                            onPress={() => router.push({ pathname: 'working' })}
                         >
-                          <LinearGradient
-                            colors={['#1e293b', '#475569']}
-                            style={styles.helpButtonGradient}
-                          >
-                            <Ionicons name="construct-outline" size={24} color="#fff" />
-                            <Text style={styles.helpButtonText}>Working</Text>
-                          </LinearGradient>
+                            <LinearGradient
+                                colors={['#1e293b', '#475569']}
+                                style={styles.helpButtonGradient}
+                            >
+                                <Ionicons name="construct-outline" size={24} color="#fff" />
+                                <Text style={styles.helpButtonText}>Working</Text>
+                            </LinearGradient>
                         </TouchableOpacity>
                     </View>
                 </View>
