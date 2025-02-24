@@ -1,3 +1,4 @@
+import React from 'react';
 import { Stack } from 'expo-router';
 import ProfilePage from '@/screens/Profile';
 
@@ -6,11 +7,7 @@ export default function Profile() {
     <>
       <Stack.Screen 
         options={{
-          title: 'Profile',
-          headerStyle: {
-            backgroundColor: '#2c3e50',
-          },
-          headerTintColor: '#fff',
+          headerShown: false
         }} 
       />
       <ProfilePage />

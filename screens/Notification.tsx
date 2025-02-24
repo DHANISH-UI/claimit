@@ -9,8 +9,10 @@ import {
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useRouter } from 'expo-router';
 
 const NotificationPage = () => {
+  const router = useRouter();
   const notifications = [
     {
       id: 1,
@@ -83,6 +85,12 @@ const NotificationPage = () => {
           colors={['#0f172a', '#1e293b']}
           style={styles.header}
         >
+          <TouchableOpacity 
+            style={styles.backButton}
+            onPress={() => router.back()}
+          >
+            <MaterialIcons name="arrow-back" size={24} color="#fff" />
+          </TouchableOpacity>
           <View style={styles.headerContent}>
             <Text style={styles.headerTitle}>Activity Feed</Text>
             <Text style={styles.headerSubtitle}>
@@ -109,7 +117,7 @@ const styles = StyleSheet.create({
   },
   header: {
     padding: 20,
-    paddingTop: 40,
+    paddingTop: 50,
     paddingBottom: 40,
   },
   headerContent: {
@@ -129,6 +137,11 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 20,
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    marginTop: -20,
+    flex: 1,
   },
   notificationCard: {
     flexDirection: 'row',
@@ -185,6 +198,13 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     backgroundColor: '#4ecdc4',
     marginLeft: 10,
+  },
+  backButton: {
+    position: 'absolute',
+    top: 50,
+    left: 20,
+    zIndex: 1,
+    padding: 8,
   },
 });
 

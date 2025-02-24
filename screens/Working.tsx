@@ -60,6 +60,12 @@ const WorkingPage = () => {
           colors={['#0f172a', '#1e293b']}
           style={styles.header}
         >
+          <TouchableOpacity 
+            style={styles.backButton}
+            onPress={() => router.back()}
+          >
+            <MaterialIcons name="arrow-back" size={24} color="#fff" />
+          </TouchableOpacity>
           <View style={styles.headerContent}>
             <Text style={styles.headerTitle}>How It Works</Text>
             <Text style={styles.headerSubtitle}>
@@ -161,7 +167,7 @@ const styles = StyleSheet.create({
   },
   header: {
     padding: 20,
-    paddingTop: 40,
+    paddingTop: 50,
     paddingBottom: 40,
   },
   headerContent: {
@@ -181,6 +187,11 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 20,
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    marginTop: -20,
+    flex: 1,
   },
   section: {
     marginBottom: 30,
@@ -282,6 +293,13 @@ const styles = StyleSheet.create({
     color: '#2c3e50',
     marginLeft: 15,
     flex: 1,
+  },
+  backButton: {
+    position: 'absolute',
+    top: 50,
+    left: 20,
+    zIndex: 1,
+    padding: 8,
   },
 });
 

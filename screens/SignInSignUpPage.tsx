@@ -26,6 +26,7 @@ const SignInSignUpPage: React.FC = () => {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [resetEmailSent, setResetEmailSent] = useState(false);
   const insets = useSafeAreaInsets();
 
   const handleSignIn = async () => {
@@ -131,6 +132,36 @@ const SignInSignUpPage: React.FC = () => {
     }
   };
 
+  const handleForgotPassword = async () => {
+    if (!email) {
+      Alert.alert('Error', 'Vere valla panikkum po');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: 'claimit://reset-password',
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      setResetEmailSent(true);
+      Alert.alert(
+        'Success',
+        'Password reset instructions have been sent to your email',
+        [{ text: 'OK' }]
+      );
+    } catch (error: any) {
+      console.error('Password reset error:', error);
+      Alert.alert('Error', error.message || 'Failed to send reset instructions');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <ScrollView 
       style={styles.container}
@@ -212,8 +243,17 @@ const SignInSignUpPage: React.FC = () => {
         </View>
 
         {!isSignUp && (
-          <TouchableOpacity style={styles.forgotPassword}>
-            <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
+          <TouchableOpacity 
+            style={styles.forgotPassword}
+            onPress={handleForgotPassword}
+            disabled={loading}
+          >
+            <Text style={[
+              styles.forgotPasswordText,
+              loading && { opacity: 0.7 }
+            ]}>
+              {loading ? 'Sending...' : 'Forgot Password?'}
+            </Text>
           </TouchableOpacity>
         )}
 

@@ -14,6 +14,7 @@ import {
 import { MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '@/lib/supabase';
+import { useRouter } from 'expo-router';
 
 type Message = {
   id: string;
@@ -34,6 +35,7 @@ const ChatSupportPage = () => {
   ]);
   const scrollViewRef = useRef<ScrollView>(null);
   const [user, setUser] = useState<any>(null);
+  const router = useRouter();
 
   useEffect(() => {
     checkUser();
@@ -89,6 +91,12 @@ const ChatSupportPage = () => {
           colors={['#0f172a', '#1e293b']}
           style={styles.header}
         >
+          <TouchableOpacity 
+            style={styles.backButton}
+            onPress={() => router.back()}
+          >
+            <MaterialIcons name="arrow-back" size={24} color="#fff" />
+          </TouchableOpacity>
           <View style={styles.headerContent}>
             <Text style={styles.headerTitle}>Chat Support</Text>
             <Text style={styles.headerSubtitle}>
@@ -174,7 +182,7 @@ const styles = StyleSheet.create({
   },
   header: {
     padding: 20,
-    paddingTop: 20,
+    paddingTop: 50,
     paddingBottom: 30,
   },
   headerContent: {
@@ -281,6 +289,13 @@ const styles = StyleSheet.create({
   },
   sendButtonDisabled: {
     opacity: 0.5,
+  },
+  backButton: {
+    position: 'absolute',
+    top: 50,
+    left: 20,
+    zIndex: 1,
+    padding: 8,
   },
 });
 

@@ -113,6 +113,12 @@ const ProfilePage = () => {
           style={styles.headerSection}
         >
           <View style={styles.profileHeader}>
+            <TouchableOpacity 
+              style={styles.backButton}
+              onPress={() => router.back()}
+            >
+              <MaterialIcons name="arrow-back" size={24} color="#fff" />
+            </TouchableOpacity>
             <View style={styles.avatarContainer}>
               <MaterialIcons name="account-circle" size={80} color="#fff" />
             </View>
@@ -188,7 +194,7 @@ const styles = StyleSheet.create({
   },
   headerSection: {
     padding: 30,
-    paddingTop: 20,
+    paddingTop: 50,
   },
   profileHeader: {
     alignItems: 'center',
@@ -215,8 +221,8 @@ const styles = StyleSheet.create({
   contentSection: {
     flex: 1,
     backgroundColor: '#f5f6fa',
-    borderTopLeftRadius: 30,
-    borderTopRightRadius: 30,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
     marginTop: -20,
     padding: 20,
   },
@@ -293,6 +299,13 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#ff6b6b',
     fontWeight: '600',
+  },
+  backButton: {
+    position: 'absolute',
+    top: 50,
+    left: 20,
+    zIndex: 1,
+    padding: 8,
   },
 });
 
