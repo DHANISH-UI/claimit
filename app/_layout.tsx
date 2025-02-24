@@ -25,6 +25,16 @@ export default function RootLayout() {
           headerTintColor: '#fff',
         }}
       />
+      <Stack.Screen
+        name="chat-support"
+        options={{
+          title: 'Chat Support',
+          headerStyle: {
+            backgroundColor: '#2c3e50',
+          },
+          headerTintColor: '#fff',
+        }}
+      />
     </Stack>
   );
 }

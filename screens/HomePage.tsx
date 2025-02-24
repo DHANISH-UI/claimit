@@ -17,6 +17,7 @@ type RootStackParamList = {
   'profile': undefined;
   'working': undefined;
   'notification': undefined;
+  '(screens)/chat-support': undefined;
 };
 
 // Create a proper navigation type
@@ -61,7 +62,7 @@ const HomePage: React.FC = () => {
                     <View style={styles.navIcons}>
                         <TouchableOpacity 
                             style={styles.iconButton}
-                            onPress={() => router.push('notification')}
+                            onPress={() => router.push('/notification')}
                         >
                             <MaterialIcons name="notifications" size={24} color="#fff" />
                             <View style={styles.notificationBadge} />
@@ -239,14 +240,17 @@ const HomePage: React.FC = () => {
                         <Text style={styles.sectionTitle}>Need Help?</Text>
                     </View>
                     <View style={styles.helpOptions}>
-                        <TouchableOpacity style={styles.helpButton}>
-                            <LinearGradient
-                                colors={['#0f172a', '#334155']}
-                                style={styles.helpButtonGradient}
-                            >
-                                <Ionicons name="chatbubble-ellipses-outline" size={24} color="#fff" />
-                                <Text style={styles.helpButtonText}>Chat Support</Text>
-                            </LinearGradient>
+                        <TouchableOpacity 
+                          style={styles.helpButton}
+                          onPress={() => router.push('/(screens)/chat-support')}
+                        >
+                          <LinearGradient
+                            colors={['#0f172a', '#334155']}
+                            style={styles.helpButtonGradient}
+                          >
+                            <Ionicons name="chatbubble-ellipses-outline" size={24} color="#fff" />
+                            <Text style={styles.helpButtonText}>Chat Support</Text>
+                          </LinearGradient>
                         </TouchableOpacity>
                         <TouchableOpacity 
                           style={styles.helpButton}

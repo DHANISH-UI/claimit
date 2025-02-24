@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, Image, ScrollView, TextInput, Alert, Platform, Modal, Keyboard, KeyboardAvoidingView
+  View, Text, StyleSheet, TouchableOpacity, Image, ScrollView, TextInput, Alert, Platform, Modal, Keyboard, KeyboardAvoidingView, ActionSheetIOS
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import * as ImagePicker from 'expo-image-picker';
@@ -52,6 +52,8 @@ type ImageInfo = {
   assets?: Array<{ uri: string }>;
   canceled?: boolean;
 };
+
+type PhotoSource = 'camera' | 'library';
 
 const LocationModal: React.FC<LocationModalProps> = ({ 
   visible, 
@@ -154,39 +156,13 @@ const FoundItemPage: React.FC = () => {
     try {
       console.log('Starting image upload process...');
       console.log('Image URI:', uri);
-      console.log('Platform:', Platform.OS);
 
       // Get current session first
-      console.log('Getting Supabase session...');
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      if (sessionError) {
+      if (sessionError || !session) {
         console.error('Session error:', sessionError);
         throw new Error('Authentication required for upload');
       }
-      console.log('Session found:', session ? 'Yes' : 'No');
-      console.log('Session user:', session?.user?.id);
-
-      // Get file info
-      const fileInfo = await fetch(uri).then(r => ({
-        size: r.headers.get('content-length'),
-        type: r.headers.get('content-type'),
-      }));
-      console.log('File info:', fileInfo);
-
-      // Get file extension from URI or content type
-      let fileExt = uri.split('.').pop()?.toLowerCase() || 'jpg';
-      if (fileInfo.type) {
-        const matches = fileInfo.type.match(/^image\/(\w+)$/);
-        if (matches) {
-          fileExt = matches[1];
-        }
-      }
-      console.log('Determined file extension:', fileExt);
-
-      // Generate unique filename
-      const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
-      const filePath = `found-items/${fileName}`;
-      console.log('Generated file path:', filePath);
 
       // Read the file as base64
       console.log('Converting image to base64...');
@@ -206,7 +182,16 @@ const FoundItemPage: React.FC = () => {
         reader.onerror = () => reject(reader.error);
         reader.readAsDataURL(blob);
       });
-      console.log('Base64 conversion successful. Length:', base64Data.length);
+
+      // Get file extension from blob type
+      const fileExt = blob.type.split('/')[1] || 'jpg';
+      console.log('File extension:', fileExt);
+
+      // Generate unique filename
+      const timestamp = Date.now();
+      const randomString = Math.random().toString(36).substring(7);
+      const fileName = `found/${session.user.id}/${timestamp}_${randomString}.${fileExt}`;
+      console.log('Generated filename:', fileName);
 
       // Convert base64 to Uint8Array
       console.log('Converting base64 to Uint8Array...');
@@ -215,87 +200,118 @@ const FoundItemPage: React.FC = () => {
       for (let i = 0; i < binaryStr.length; i++) {
         bytes[i] = binaryStr.charCodeAt(i);
       }
-      console.log('Converted to Uint8Array. Length:', bytes.length);
-
-      // Determine content type
-      const contentType = `image/${fileExt}`;
-      console.log('Content type:', contentType);
 
       // Upload to Supabase storage
       console.log('Starting Supabase upload...');
       const { error: uploadError, data: uploadData } = await supabase.storage
         .from('items-photos')
-        .upload(filePath, bytes, {
-          contentType,
+        .upload(fileName, bytes, {
+          contentType: blob.type,
           cacheControl: '3600',
           upsert: false
         });
 
       if (uploadError) {
-        console.error('Upload error details:', JSON.stringify(uploadError, null, 2));
+        console.error('Upload error details:', uploadError);
         throw new Error(`Upload failed: ${uploadError.message}`);
       }
 
-      console.log('Upload successful:', JSON.stringify(uploadData, null, 2));
+      console.log('Upload successful:', uploadData);
 
       // Get the public URL
-      console.log('Getting public URL...');
       const { data: { publicUrl } } = supabase.storage
         .from('items-photos')
-        .getPublicUrl(filePath);
+        .getPublicUrl(fileName);
 
       console.log('Public URL generated:', publicUrl);
       return publicUrl;
 
     } catch (error: any) {
       console.error('Detailed upload error:', error);
-      console.error('Error name:', error?.name);
-      console.error('Error type:', error?.constructor?.name);
-      console.error('Error message:', error?.message);
-      console.error('Error stack:', error?.stack);
-      if (error?.cause) {
-        console.error('Error cause:', JSON.stringify(error.cause, null, 2));
-      }
       throw new Error(error?.message || 'Failed to upload image. Please try again.');
     }
   };
 
   const handlePhotoUpload = async () => {
     try {
-      console.log('Starting photo selection process...');
-      
+      if (Platform.OS === 'ios') {
+        ActionSheetIOS.showActionSheetWithOptions(
+          {
+            options: ['Cancel', 'Take Photo', 'Choose from Library'],
+            cancelButtonIndex: 0,
+          },
+          async (buttonIndex) => {
+            if (buttonIndex === 1) {
+              await takePhoto();
+            } else if (buttonIndex === 2) {
+              await pickFromLibrary();
+            }
+          }
+        );
+      } else {
+        Alert.alert(
+          'Add Photo',
+          'Choose a photo source',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Take Photo', onPress: takePhoto },
+            { text: 'Choose from Library', onPress: pickFromLibrary },
+          ]
+        );
+      }
+    } catch (error) {
+      console.error('Photo selection error:', error);
+      Alert.alert('Error', 'Failed to handle photo selection. Please try again.');
+    }
+  };
+
+  const takePhoto = async () => {
+    try {
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const selectedAsset = result.assets[0];
+        console.log('Camera photo taken:', {
+          uri: selectedAsset.uri,
+          width: selectedAsset.width,
+          height: selectedAsset.height,
+        });
+        
+        setPhotos([...photos, selectedAsset.uri]);
+      }
+    } catch (error) {
+      console.error('Camera error:', error);
+      Alert.alert('Error', 'Failed to take photo. Please try again.');
+    }
+  };
+
+  const pickFromLibrary = async () => {
+    try {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         aspect: [4, 3],
         quality: 0.8,
-        base64: true,
-      });
-
-      console.log('Image picker result:', {
-        cancelled: result.canceled,
-        assets: result.assets ? result.assets.length : 0
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const selectedAsset = result.assets[0];
-        console.log('Selected image details:', {
+        console.log('Library photo selected:', {
           uri: selectedAsset.uri,
-          type: selectedAsset.type,
           width: selectedAsset.width,
           height: selectedAsset.height,
-          fileSize: selectedAsset.fileSize,
         });
         
         setPhotos([...photos, selectedAsset.uri]);
-        console.log('Updated photos array length:', photos.length + 1);
-      } else {
-        console.log('No image selected or picker cancelled');
       }
     } catch (error) {
-      console.error('Photo selection error:', error);
-      console.error('Error details:', JSON.stringify(error, null, 2));
-      Alert.alert('Error', 'Failed to select photo. Please try again.');
+      console.error('Photo library error:', error);
+      Alert.alert('Error', 'Failed to select photo from library. Please try again.');
     }
   };
 
