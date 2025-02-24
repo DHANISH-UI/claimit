@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView, Dimensions, Platform } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView, Dimensions, Platform, TextInput } from 'react-native';
 import { MaterialIcons, Ionicons } from '@expo/vector-icons'; // For icons
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -32,15 +32,52 @@ const HomePage: React.FC = () => {
     const insets = useSafeAreaInsets();
     const navigation = useNavigation<HomeScreenNavigationProp>();
     const router = useRouter();
+    const [userRating, setUserRating] = useState(0);
+    const [userReview, setUserReview] = useState('');
+    const [reviews, setReviews] = useState([
+        {
+            id: 1,
+            name: 'Almas',
+            rating: 5,
+            text: '"Found my lost laptop within 24 hours! This app is a lifesaver. The community is incredibly helpful."',
+        },
+        {
+            id: 2,
+            name: 'Abiram',
+            rating: 5,
+            text: '"Reunited with my lost phone thanks to this amazing platform. The process was smooth and secure."',
+        },
+        {
+            id: 3,
+            name: 'Hana',
+            rating: 4,
+            text: '"Great community-driven platform. Helped me return a lost wallet to its owner. Very satisfying experience!"',
+        },
+    ]);
+
+    const handlePostReview = () => {
+        if (!userRating || !userReview.trim()) return;
+
+        const newReview = {
+            id: Date.now(),
+            name: 'You', // You might want to get the actual user name
+            rating: userRating,
+            text: `"${userReview.trim()}"`,
+        };
+
+        setReviews([...reviews, newReview]);
+        setUserRating(0);
+        setUserReview('');
+    };
 
     const handleLostPress = () => {
         console.log('Navigating to Lost page...');
-        router.push({ pathname: 'lost' });
+        router.push({ pathname: '/lost' });
     };
 
     const handleFoundPress = () => {
         console.log('Navigating to Found page...');
-        router.push({ pathname: 'found' });
+        router.push({ pathname: '/found' });
     };
 
     return (
@@ -62,14 +99,14 @@ const HomePage: React.FC = () => {
                     <View style={styles.navIcons}>
                         <TouchableOpacity 
                             style={styles.iconButton}
-                            onPress={() => router.push({ pathname: 'notification' })}
+                            onPress={() => router.push({ pathname: '/notification' })}
                         >
                             <MaterialIcons name="notifications" size={24} color="#fff" />
                             <View style={styles.notificationBadge} />
                         </TouchableOpacity>
                         <TouchableOpacity 
                             style={styles.iconButton}
-                            onPress={() => router.push({ pathname: 'profile' })}
+                            onPress={() => router.push({ pathname: '/profile' })}
                         >
                             <MaterialIcons name="account-circle" size={24} color="#fff" />
                         </TouchableOpacity>
@@ -165,72 +202,67 @@ const HomePage: React.FC = () => {
                         showsHorizontalScrollIndicator={false}
                         style={styles.reviewsScroll}
                     >
-                        <View style={styles.reviewCard}>
-                            <View style={styles.reviewHeader}>
-                                <MaterialIcons name="account-circle" size={40} color="#2c3e50" />
-                                <View style={styles.reviewerInfo}>
-                                    <Text style={styles.reviewerName}>Almas</Text>
-                                    <View style={styles.ratingContainer}>
-                                        {[1, 2, 3, 4, 5].map((star) => (
-                                            <MaterialIcons 
-                                                key={star} 
-                                                name="star" 
-                                                size={16} 
-                                                color="#ffd700" 
-                                            />
-                                        ))}
+                        {reviews.map((review) => (
+                            <View key={review.id} style={styles.reviewCard}>
+                                <View style={styles.reviewHeader}>
+                                    <MaterialIcons name="account-circle" size={40} color="#2c3e50" />
+                                    <View style={styles.reviewerInfo}>
+                                        <Text style={styles.reviewerName}>{review.name}</Text>
+                                        <View style={styles.ratingContainer}>
+                                            {[1, 2, 3, 4, 5].map((star) => (
+                                                <MaterialIcons 
+                                                    key={star} 
+                                                    name="star" 
+                                                    size={16} 
+                                                    color="#ffd700" 
+                                                />
+                                            ))}
+                                        </View>
                                     </View>
                                 </View>
+                                <Text style={styles.reviewText}>{review.text}</Text>
                             </View>
-                            <Text style={styles.reviewText}>
-                                "Found my lost laptop within 24 hours! This app is a lifesaver. The community is incredibly helpful."
-                            </Text>
-                        </View>
-
-                        <View style={styles.reviewCard}>
-                            <View style={styles.reviewHeader}>
-                                <MaterialIcons name="account-circle" size={40} color="#2c3e50" />
-                                <View style={styles.reviewerInfo}>
-                                    <Text style={styles.reviewerName}>Abiram</Text>
-                                    <View style={styles.ratingContainer}>
-                                        {[1, 2, 3, 4, 5].map((star) => (
-                                            <MaterialIcons 
-                                                key={star} 
-                                                name="star" 
-                                                size={16} 
-                                                color="#ffd700" 
-                                            />
-                                        ))}
-                                    </View>
-                                </View>
-                            </View>
-                            <Text style={styles.reviewText}>
-                                "Reunited with my lost phone thanks to this amazing platform. The process was smooth and secure."
-                            </Text>
-                        </View>
-
-                        <View style={styles.reviewCard}>
-                            <View style={styles.reviewHeader}>
-                                <MaterialIcons name="account-circle" size={40} color="#2c3e50" />
-                                <View style={styles.reviewerInfo}>
-                                    <Text style={styles.reviewerName}>Hana</Text>
-                                    <View style={styles.ratingContainer}>
-                                        {[1, 2, 3, 4].map((star) => (
-                                            <MaterialIcons 
-                                                key={star} 
-                                                name="star" 
-                                                size={16} 
-                                                color="#ffd700" 
-                                            />
-                                        ))}
-                                    </View>
-                                </View>
-                            </View>
-                            <Text style={styles.reviewText}>
-                                "Great community-driven platform. Helped me return a lost wallet to its owner. Very satisfying experience!"
-                            </Text>
-                        </View>
+                        ))}
                     </ScrollView>
+
+                    <View style={styles.reviewDivider} />
+
+                    <View style={styles.writeReviewContainer}>
+                        <Text style={styles.writeReviewTitle}>Write a Review</Text>
+                        <View style={styles.ratingContainer}>
+                            {[1, 2, 3, 4, 5].map((star) => (
+                                <TouchableOpacity 
+                                    key={star} 
+                                    onPress={() => setUserRating(star)}
+                                >
+                                    <MaterialIcons 
+                                        name={userRating >= star ? "star" : "star-border"} 
+                                        size={32} 
+                                        color="#ffd700" 
+                                    />
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+                        <TextInput
+                            style={styles.reviewInput}
+                            placeholder="Share your experience..."
+                            value={userReview}
+                            onChangeText={setUserReview}
+                            multiline
+                            numberOfLines={3}
+                            placeholderTextColor="#94a3b8"
+                        />
+                        <TouchableOpacity 
+                            style={[
+                                styles.postButton,
+                                (!userRating || !userReview.trim()) && styles.postButtonDisabled
+                            ]}
+                            onPress={handlePostReview}
+                            disabled={!userRating || !userReview.trim()}
+                        >
+                            <Text style={styles.postButtonText}>Post Review</Text>
+                        </TouchableOpacity>
+                    </View>
                 </View>
 
                 {/* Help Section */}
@@ -242,7 +274,7 @@ const HomePage: React.FC = () => {
                     <View style={styles.helpOptions}>
                         <TouchableOpacity 
                             style={styles.helpButton}
-                            onPress={() => router.push({ pathname: 'chat-support' })}
+                            onPress={() => router.push({ pathname: '/chat-support' })}
                         >
                             <LinearGradient
                                 colors={['#0f172a', '#334155']}
@@ -254,7 +286,7 @@ const HomePage: React.FC = () => {
                         </TouchableOpacity>
                         <TouchableOpacity 
                             style={styles.helpButton}
-                            onPress={() => router.push({ pathname: 'working' })}
+                            onPress={() => router.push({ pathname: '/working' })}
                         >
                             <LinearGradient
                                 colors={['#1e293b', '#475569']}
@@ -623,12 +655,55 @@ const styles = StyleSheet.create({
     },
     ratingContainer: {
         flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 8,
+        gap: 4,
     },
     reviewText: {
         fontSize: 14,
         color: '#64748b',
         lineHeight: 20,
         fontStyle: 'italic',
+    },
+    reviewInput: {
+        backgroundColor: '#f8fafc',
+        borderRadius: 12,
+        padding: 16,
+        marginBottom: 16,
+        borderWidth: 1,
+        borderColor: '#e2e8f0',
+        minHeight: 100,
+        textAlignVertical: 'top',
+    },
+    postButton: {
+        backgroundColor: '#3b82f6',
+        paddingVertical: 12,
+        paddingHorizontal: 24,
+        borderRadius: 8,
+        alignSelf: 'flex-end',
+    },
+    postButtonDisabled: {
+        backgroundColor: '#94a3b8',
+        opacity: 0.7,
+    },
+    postButtonText: {
+        color: '#ffffff',
+        fontSize: 16,
+        fontWeight: '600',
+    },
+    reviewDivider: {
+        height: 1,
+        backgroundColor: '#e2e8f0',
+        marginVertical: 20,
+    },
+    writeReviewContainer: {
+        paddingTop: 10,
+    },
+    writeReviewTitle: {
+        fontSize: 18,
+        fontWeight: '600',
+        marginBottom: 16,
+        color: '#1f2937',
     },
 });
 
