@@ -12,24 +12,6 @@ A modern mobile application designed to help people report and find lost items w
 - Interactive maps for item locations
 - Chat support system
 
-## Quick Start
-
-1. Install dependencies:
-```bash
-npm install
-```
-
-2. Set up environment variables in `.env`:
-```env
-EXPO_PUBLIC_SUPABASE_URL=your_supabase_url
-EXPO_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
-```
-
-3. Start the app:
-```bash
-npx expo start
-```
-
 ## Tech Stack
 
 - React Native + Expo
