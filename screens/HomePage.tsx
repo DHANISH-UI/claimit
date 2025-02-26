@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView, Dimensions, Platform, TextInput } from 'react-native';
 import { MaterialIcons, Ionicons } from '@expo/vector-icons'; // For icons
 import { LinearGradient } from 'expo-linear-gradient';
@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useRouter, Link } from 'expo-router';
+import { supabase } from '@/lib/supabase';
 
 // Define navigation type properly
 type RootStackParamList = {
@@ -34,6 +35,7 @@ const HomePage: React.FC = () => {
     const router = useRouter();
     const [userRating, setUserRating] = useState(0);
     const [userReview, setUserReview] = useState('');
+    const [userName, setUserName] = useState('');
     const [reviews, setReviews] = useState([
         {
             id: 1,
@@ -55,6 +57,30 @@ const HomePage: React.FC = () => {
         },
       
     ]);
+
+    useEffect(() => {
+        getUserName();
+    }, []);
+
+    const getUserName = async () => {
+        try {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+                // First try to get the display name from user metadata
+                const displayName = user.user_metadata?.display_name;
+                if (displayName) {
+                    setUserName(displayName);
+                } else {
+                    // Fallback to email name if no display name
+                    const nameFromEmail = user.email?.split('@')[0] || 'User';
+                    setUserName(nameFromEmail);
+                }
+            }
+        } catch (error) {
+            console.error('Error fetching user:', error);
+            setUserName('User');
+        }
+    };
 
     const handlePostReview = () => {
         if (!userRating || !userReview.trim()) return;
@@ -87,7 +113,7 @@ const HomePage: React.FC = () => {
             contentContainerStyle={styles.contentContainer}
             showsVerticalScrollIndicator={false}
         >
-            {/* Enhanced Header with Gradient */}
+            {/*  Header with Gradient */}
             <LinearGradient
                 colors={['#0f172a', '#1e293b']}  // Deep blue-gray to slate
                 start={{ x: 0, y: 0 }}
@@ -116,7 +142,7 @@ const HomePage: React.FC = () => {
                 <View style={styles.headerContent}>
                     <View style={styles.greetingContainer}>
                         <Text style={styles.welcomeText}>Welcome Back,</Text>
-                        <Text style={styles.userName}>Ashbin!</Text>
+                        <Text style={styles.userName}>{userName}!</Text>
                         <View style={styles.taglineWrapper}>
                             <Text style={styles.tagline}>
                                 Reuniting Lost Items with Their Rightful Owners

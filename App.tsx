@@ -1,14 +1,25 @@
 import React, { useEffect, useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { Session } from '@supabase/supabase-js';
 import { supabase } from './lib/supabase';
 import SignInSignUpPage from './screens/SignInSignUpPage';
 import HomePage from './screens/HomePage';
+import LostPage from './screens/Lost';
+import FoundPage from './screens/Found';
+
+// Define the type for our stack navigator
+type RootStackParamList = {
+  SignInSignUp: undefined;
+  Home: undefined;
+  Lost: undefined;
+  Found: undefined;
+};
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export default function App() {
-  const [session, setSession] = useState(null);
+  const [session, setSession] = useState<Session | null>(null);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {

@@ -24,6 +24,7 @@ const SignInSignUpPage: React.FC = () => {
   const [isSignUp, setIsSignUp] = useState(false); // Toggle between Sign In and Sign Up
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [displayName, setDisplayName] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [resetEmailSent, setResetEmailSent] = useState(false);
@@ -78,7 +79,7 @@ const SignInSignUpPage: React.FC = () => {
   const handleSignUp = async () => {
     console.log('Starting sign up process...');
     
-    if (!email || !password || !confirmPassword) {
+    if (!email || !password || !confirmPassword || !displayName) {
       Alert.alert('Error', 'Please fill in all fields');
       return;
     }
@@ -98,6 +99,7 @@ const SignInSignUpPage: React.FC = () => {
         options: {
           emailRedirectTo: 'claimit://',
           data: {
+            display_name: displayName,
             created_at: new Date().toISOString(),
           }
         }
@@ -111,9 +113,12 @@ const SignInSignUpPage: React.FC = () => {
       if (data?.user) {
         console.log('Sign up successful. User ID:', data.user.id);
         Alert.alert(
-          'Success', 
-          'Registration successful! Please check your email for verification.',
-          [{ text: 'OK', onPress: () => setIsSignUp(false) }]
+          'Verification Required',
+          'Please check your email for a verification link. You need to verify your email before signing in.',
+          [{ 
+            text: 'OK',
+            onPress: () => setIsSignUp(false) // Switch back to sign in view
+          }]
         );
       } else {
         console.log('No user data received');
@@ -188,6 +193,22 @@ const SignInSignUpPage: React.FC = () => {
         </View>
 
         <View style={styles.inputsContainer}>
+          {isSignUp && (
+            <View style={styles.inputWrapper}>
+              <Text style={styles.inputLabel}>Display Name</Text>
+              <View style={styles.inputContainer}>
+                <MaterialIcons name="person" size={20} color="#94a3b8" />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Enter your display name"
+                  placeholderTextColor="#94a3b8"
+                  value={displayName}
+                  onChangeText={setDisplayName}
+                />
+              </View>
+            </View>
+          )}
+
           <View style={styles.inputWrapper}>
             <Text style={styles.inputLabel}>Email</Text>
             <View style={styles.inputContainer}>

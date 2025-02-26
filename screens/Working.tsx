@@ -118,7 +118,8 @@ const WorkingPage = () => {
               {features.map((feature, index) => (
                 <View key={index} style={styles.featureCard}>
                   <View style={[styles.featureIcon, { backgroundColor: feature.color }]}>
-                    <MaterialIcons name={feature.icon} size={24} color="#fff" />
+                    <MaterialIcons name={feature.icon as any} size={24} color="#fff" />
+
                   </View>
                   <Text style={styles.featureTitle}>{feature.title}</Text>
                   <Text style={styles.featureDescription}>{feature.description}</Text>

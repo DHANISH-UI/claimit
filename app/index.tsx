@@ -10,26 +10,11 @@ export default function App() {
 
   useEffect(() => {
     checkUser();
-    
-    // Set up auth state change listener
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setAuthenticated(!!session);
-      setLoading(false);
-    });
-
-    // Cleanup subscription
-    return () => {
-      subscription.unsubscribe();
-    };
   }, []);
 
   async function checkUser() {
     try {
-      const { data: { session }, error } = await supabase.auth.getSession();
-      if (error) {
-        console.error('Error checking auth:', error);
-        throw error;
-      }
+      const { data: { session } } = await supabase.auth.getSession();
       setAuthenticated(!!session);
     } catch (error) {
       console.error('Error checking auth:', error);
