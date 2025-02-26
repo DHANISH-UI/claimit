@@ -77,42 +77,39 @@ const SignInSignUpPage: React.FC = () => {
 
   const handleSignUp = async () => {
     console.log('Starting sign up process...');
-    console.log('Email:', email);
-    console.log('Password length:', password.length);
-    console.log('Confirm password length:', confirmPassword.length);
-
+    
     if (!email || !password || !confirmPassword) {
-      console.log('Sign up validation failed: Missing fields');
       Alert.alert('Error', 'Please fill in all fields');
       return;
     }
 
     if (password !== confirmPassword) {
-      console.log('Sign up validation failed: Passwords do not match');
       Alert.alert('Error', 'Passwords do not match');
       return;
     }
 
     try {
-      console.log('Setting loading state...');
       setLoading(true);
-
-      console.log('Attempting to sign up with Supabase...');
+      console.log('Attempting to sign up with email:', email);
+      
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
+        options: {
+          emailRedirectTo: 'claimit://',
+          data: {
+            created_at: new Date().toISOString(),
+          }
+        }
       });
 
-      console.log('Supabase response received');
-      console.log('Data:', JSON.stringify(data, null, 2));
       if (error) {
-        console.error('Supabase error:', error);
+        console.error('Sign up error:', error.message);
         throw error;
       }
 
-      if (data.user) {
-        console.log('Sign up successful. User:', data.user.id);
-        console.log('Email confirmation status:', data.user.confirmed_at ? 'Confirmed' : 'Pending');
+      if (data?.user) {
+        console.log('Sign up successful. User ID:', data.user.id);
         Alert.alert(
           'Success', 
           'Registration successful! Please check your email for verification.',
@@ -120,14 +117,12 @@ const SignInSignUpPage: React.FC = () => {
         );
       } else {
         console.log('No user data received');
-        Alert.alert('Error', 'No user data received');
+        Alert.alert('Error', 'Failed to create account. Please try again.');
       }
     } catch (error: any) {
       console.error('Sign up error:', error);
-      console.error('Error details:', JSON.stringify(error, null, 2));
       Alert.alert('Error', error.message || 'An error occurred during sign up');
     } finally {
-      console.log('Sign up process completed');
       setLoading(false);
     }
   };

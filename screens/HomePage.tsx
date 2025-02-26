@@ -48,11 +48,12 @@ const HomePage: React.FC = () => {
             text: '"Reunited with my lost phone thanks to this amazing platform. The process was smooth and secure."',
         },
         {
-            id: 3,
-            name: 'Hana',
-            rating: 4,
-            text: '"Great community-driven platform. Helped me return a lost wallet to its owner. Very satisfying experience!"',
+            id: 4,
+            name: 'Ashbin',
+            rating: 5,
+            text: '"Excellent app! Found my lost keys in just a few hours. The map feature is particularly helpful."',
         },
+      
     ]);
 
     const handlePostReview = () => {

@@ -14,9 +14,7 @@ console.log('Platform:', Platform.OS);
 const webStorage = {
   getItem: (key: string) => {
     console.log('Web storage - Getting item:', key);
-    const value = localStorage.getItem(key);
-    console.log('Web storage - Value retrieved:', value ? 'Present' : 'None');
-    return value;
+    return localStorage.getItem(key);
   },
   setItem: (key: string, value: string) => {
     console.log('Web storage - Setting item:', key);
@@ -32,9 +30,7 @@ const webStorage = {
 const ExpoSecureStoreAdapter = {
   getItem: async (key: string) => {
     console.log('Secure storage - Getting item:', key);
-    const value = await SecureStore.getItemAsync(key);
-    console.log('Secure storage - Value retrieved:', value ? 'Present' : 'None');
-    return value;
+    return await SecureStore.getItemAsync(key);
   },
   setItem: async (key: string, value: string) => {
     console.log('Secure storage - Setting item:', key);
