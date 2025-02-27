@@ -13,11 +13,12 @@ import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialIcons } from '@expo/vector-icons';
+import DateTimePicker from '@react-native-community/datetimepicker';
 
 type RootStackParamList = {
   Home: undefined;
-  Found: undefined;
   Lost: undefined;
+  Found: undefined;
   SignInSignUp: undefined;
 };
 
@@ -53,7 +54,28 @@ type ImageInfo = {
   canceled?: boolean;
 };
 
+type FoundItem = {
+  id: string;
+  created_at: string;
+  user_id: string;
+  item_name: string;  
+  category: string;
+  description: string;
+  date_found: string;
+  contact_details: string;
+  photos: string[];
+  location: {
+    latitude: number;
+    longitude: number;
+  };
+  status: 'active' | 'found' | 'closed';
+  updated_at: string;
+};
+
 type PhotoSource = 'camera' | 'library';
+
+// Make sure bucket name is consistent
+const bucketName = 'lost-items-photos';
 
 const LocationModal: React.FC<LocationModalProps> = ({ 
   visible, 
@@ -134,6 +156,7 @@ const FoundItemPage: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const mapRef = useRef<MapView | null>(null);
+  const [showDatePicker, setShowDatePicker] = useState(false);
 
   const categories = ['Electronics', 'Gadgets', 'Clothing', 'Documents', 'Wallet', 'Keys', 'Other'];
 
@@ -157,58 +180,41 @@ const FoundItemPage: React.FC = () => {
       console.log('Starting image upload process...');
       console.log('Image URI:', uri);
 
-      // Get current session first
+      // Ensure the URI is valid and accessible
+      const response = await fetch(uri);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch image: ${response.statusText}`);
+      }
+
+      // Convert the image to a blob
+      const blob = await response.blob();
+      console.log('Blob created:', blob);
+
+      // Temporarily return the local URI instead of uploading to Supabase
+      return uri;
+
+      /* Commenting out Supabase upload code
+      // Get the current session
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
       if (sessionError || !session) {
         console.error('Session error:', sessionError);
         throw new Error('Authentication required for upload');
       }
 
-      // Read the file as base64
-      console.log('Converting image to base64...');
-      const response = await fetch(uri);
-      const blob = await response.blob();
-      const base64Data = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-          if (typeof reader.result === 'string') {
-            // Remove the data URL prefix (e.g., "data:image/jpeg;base64,")
-            const base64 = reader.result.split(',')[1];
-            resolve(base64);
-          } else {
-            reject(new Error('Failed to convert to base64'));
-          }
-        };
-        reader.onerror = () => reject(reader.error);
-        reader.readAsDataURL(blob);
-      });
-
-      // Get file extension from blob type
+      // Generate a unique filename
       const fileExt = blob.type.split('/')[1] || 'jpg';
-      console.log('File extension:', fileExt);
-
-      // Generate unique filename
       const timestamp = Date.now();
       const randomString = Math.random().toString(36).substring(7);
       const fileName = `found/${session.user.id}/${timestamp}_${randomString}.${fileExt}`;
       console.log('Generated filename:', fileName);
 
-      // Convert base64 to Uint8Array
-      console.log('Converting base64 to Uint8Array...');
-      const binaryStr = atob(base64Data);
-      const bytes = new Uint8Array(binaryStr.length);
-      for (let i = 0; i < binaryStr.length; i++) {
-        bytes[i] = binaryStr.charCodeAt(i);
-      }
-
-      // Upload to Supabase storage
-      console.log('Starting Supabase upload...');
-      const { error: uploadError, data: uploadData } = await supabase.storage
-        .from('items-photos')
-        .upload(fileName, bytes, {
+      // Upload the image to Supabase Storage
+      const { error: uploadError } = await supabase.storage
+        .from('lost-items-photos')
+        .upload(fileName, blob, {
           contentType: blob.type,
           cacheControl: '3600',
-          upsert: false
+          upsert: false,
         });
 
       if (uploadError) {
@@ -216,19 +222,40 @@ const FoundItemPage: React.FC = () => {
         throw new Error(`Upload failed: ${uploadError.message}`);
       }
 
-      console.log('Upload successful:', uploadData);
-
-      // Get the public URL
+      // Get the public URL of the uploaded image
       const { data: { publicUrl } } = supabase.storage
-        .from('items-photos')
+        .from('lost-items-photos')
         .getPublicUrl(fileName);
 
       console.log('Public URL generated:', publicUrl);
       return publicUrl;
+      */
 
     } catch (error: any) {
-      console.error('Detailed upload error:', error);
-      throw new Error(error?.message || 'Failed to upload image. Please try again.');
+      console.error('Upload error details:', error);
+      throw new Error(error?.message || 'Failed to upload image');
+    }
+  };
+
+  const ensureFileUri = (uri: string): string => {
+    if (!uri.startsWith('file://')) {
+      return `file://${uri}`;
+    }
+    return uri;
+  };
+
+  const testImageAccess = async (uri: string) => {
+    try {
+      const response = await fetch(uri);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch image: ${response.statusText}`);
+      }
+      const blob = await response.blob();
+      console.log('Image is accessible. Blob:', blob);
+      return true;
+    } catch (error) {
+      console.error('Image access error:', error);
+      return false;
     }
   };
 
@@ -265,31 +292,6 @@ const FoundItemPage: React.FC = () => {
     }
   };
 
-  const takePhoto = async () => {
-    try {
-      const result = await ImagePicker.launchCameraAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [4, 3],
-        quality: 0.8,
-      });
-
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        const selectedAsset = result.assets[0];
-        console.log('Camera photo taken:', {
-          uri: selectedAsset.uri,
-          width: selectedAsset.width,
-          height: selectedAsset.height,
-        });
-        
-        setPhotos([...photos, selectedAsset.uri]);
-      }
-    } catch (error) {
-      console.error('Camera error:', error);
-      Alert.alert('Error', 'Failed to take photo. Please try again.');
-    }
-  };
-
   const pickFromLibrary = async () => {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
@@ -301,17 +303,38 @@ const FoundItemPage: React.FC = () => {
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const selectedAsset = result.assets[0];
-        console.log('Library photo selected:', {
-          uri: selectedAsset.uri,
-          width: selectedAsset.width,
-          height: selectedAsset.height,
-        });
-        
-        setPhotos([...photos, selectedAsset.uri]);
+        const uri = ensureFileUri(selectedAsset.uri); // Ensure the URI starts with 'file://'
+        console.log('Selected image URI:', uri);
+
+        // Add the URI to the photos state
+        setPhotos([...photos, uri]);
       }
     } catch (error) {
       console.error('Photo library error:', error);
       Alert.alert('Error', 'Failed to select photo from library. Please try again.');
+    }
+  };
+
+  const takePhoto = async () => {
+    try {
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const selectedAsset = result.assets[0];
+        const uri = ensureFileUri(selectedAsset.uri); // Ensure the URI starts with 'file://'
+        console.log('Camera photo URI:', uri);
+
+        // Add the URI to the photos state
+        setPhotos([...photos, uri]);
+      }
+    } catch (error) {
+      console.error('Camera error:', error);
+      Alert.alert('Error', 'Failed to take photo. Please try again.');
     }
   };
 
@@ -335,7 +358,7 @@ const FoundItemPage: React.FC = () => {
     setLocationModalVisible(true);
   };
 
-  const handleSearchLocation = async () => {
+  const handleSearchLocation = useCallback(async () => {
     try {
       Keyboard.dismiss();
       
@@ -356,7 +379,7 @@ const FoundItemPage: React.FC = () => {
         };
 
         setLocation(newLocation);
-        setSelectedLocation(newLocation);
+        setSelectedLocation({ latitude, longitude });
         setLocationModalVisible(false);
         setSearchQuery('');
 
@@ -370,10 +393,16 @@ const FoundItemPage: React.FC = () => {
       console.error('Search error:', error);
       Alert.alert('Error', 'Failed to search location. Please try again.');
     }
-  };
+  }, [searchQuery]);
 
   const handleCurrentLocation = async () => {
     try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Denied', 'Please enable location permissions to use this feature.');
+        return;
+      }
+
       const currentLocation = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.High
       });
@@ -386,87 +415,18 @@ const FoundItemPage: React.FC = () => {
       };
       
       setLocation(newLocation);
-      setSelectedLocation(newLocation);
+      setSelectedLocation({
+        latitude: currentLocation.coords.latitude,
+        longitude: currentLocation.coords.longitude
+      });
       setLocationModalVisible(false);
+
+      if (mapRef.current) {
+        mapRef.current.animateToRegion(newLocation, 1000);
+      }
     } catch (error) {
+      console.error('Location error:', error);
       Alert.alert('Error', 'Failed to get current location. Please check your location settings.');
-    }
-  };
-
-  const handleSubmit = async () => {
-    if (!itemName || !category || !description || !date || !contactDetails || photos.length === 0 || !selectedLocation) {
-      Alert.alert('Error', 'Please fill all fields, upload a photo, and select a location.');
-      return;
-    }
-
-    try {
-      setLoading(true);
-
-      // Upload photos and get their URLs
-      const photoUrls = [];
-      for (const photo of photos) {
-        try {
-          const url = await uploadImage(photo);
-          photoUrls.push(url);
-        } catch (error) {
-          console.error('Error uploading photo:', error);
-          Alert.alert('Upload Error', 'Failed to upload one or more photos. Please try again.');
-          setLoading(false);
-          return;
-        }
-      }
-
-      // Prepare location data
-      const locationData = {
-        latitude: selectedLocation.latitude,
-        longitude: selectedLocation.longitude,
-      };
-
-      // Format date to ISO string
-      const formattedDate = new Date(date).toISOString().split('T')[0];
-
-      // Insert into Supabase
-      const { data, error } = await supabase
-        .from('found')
-        .insert([
-          {
-            item_name: itemName,
-            category,
-            description,
-            date_found: formattedDate,
-            contact_details: contactDetails,
-            photos: photoUrls,
-            location: locationData,
-          }
-        ])
-        .select();
-
-      if (error) {
-        console.error('Database error:', error);
-        throw new Error('Failed to save item details. Please try again.');
-      }
-
-      Alert.alert(
-        'Success', 
-        'Found item posted successfully!',
-        [{ text: 'OK', onPress: () => router.back() }]
-      );
-
-      // Reset form
-      setItemName('');
-      setCategory('');
-      setDescription('');
-      setDate('');
-      setContactDetails('');
-      setPhotos([]);
-      setSelectedLocation(null);
-      setLocation(null);
-
-    } catch (error) {
-      console.error('Submission error:', error);
-      Alert.alert('Error', error instanceof Error ? error.message : 'Failed to submit found item. Please try again.');
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -480,6 +440,82 @@ const FoundItemPage: React.FC = () => {
     Keyboard.dismiss();
   }, []);
 
+  const handleSubmit = async () => {
+    console.log('Starting form submission process...');
+
+    // Validate all required fields (excluding photos)
+    if (!itemName || !category || !description || !date || !contactDetails || !selectedLocation) {
+      Alert.alert('Error', 'Please fill all fields and select a location.');
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      // Check authentication
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !session) {
+        throw new Error('Authentication required. Please sign in.');
+      }
+
+      // Prepare and send data to Supabase (excluding photos)
+      const foundItemData = {
+        user_id: session.user.id,
+        item_name: itemName.trim(),
+        category: category.trim(),
+        description: description.trim(),
+        date_found: new Date(date).toISOString().split('T')[0],
+        contact_details: contactDetails.trim(),
+        location: {
+          latitude: selectedLocation.latitude,
+          longitude: selectedLocation.longitude,
+        },
+        status: 'active',
+      };
+
+      // Insert the data into Supabase
+      const { data, error } = await supabase
+        .from('found')
+        .insert([foundItemData])
+        .select();
+
+      if (error) {
+        console.error('Supabase error:', error);
+        throw new Error(error.message || 'Failed to save item details.');
+      }
+
+      console.log('Found item saved successfully:', JSON.stringify(data, null, 2));
+
+      Alert.alert('Success', 'Found item report created!', [
+        { text: 'OK', onPress: () => router.back() },
+      ]);
+
+      // Reset the form (including photos)
+      setItemName('');
+      setCategory('');
+      setDescription('');
+      setDate('');
+      setContactDetails('');
+      setPhotos([]); // Clear photos from state
+      setSelectedLocation(null);
+      setLocation(null);
+
+    } catch (error: unknown) {
+      console.error('Submission error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to submit found item. Please try again.';
+      Alert.alert('Error', errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDateChange = (event: any, selectedDate?: Date) => {
+    setShowDatePicker(false);
+    if (selectedDate) {
+      setDate(selectedDate.toISOString().split('T')[0]);
+    }
+  };
+
   return (
     <ScrollView 
       contentContainerStyle={styles.container}
@@ -487,7 +523,7 @@ const FoundItemPage: React.FC = () => {
     >
       <View style={styles.headerContainer}>
         <Text style={styles.title}>Report a Found Item</Text>
-        <Text style={styles.subtitle}>Help others find their lost belongings</Text>
+        <Text style={styles.subtitle}>Help us locate your missing belongings</Text>
       </View>
 
       <View style={styles.formContainer}>
@@ -520,13 +556,24 @@ const FoundItemPage: React.FC = () => {
 
         <View style={styles.sectionContainer}>
           <Text style={styles.sectionTitle}>Date & Contact</Text>
-          <TextInput 
-            style={[styles.input, styles.elevatedInput]} 
-            placeholder="Date Found (YYYY-MM-DD)" 
-            value={date} 
-            onChangeText={setDate}
-            placeholderTextColor="#666" 
-          />
+          <TouchableOpacity 
+            style={[styles.input, styles.elevatedInput]}
+            onPress={() => setShowDatePicker(true)}
+          >
+            <Text style={date ? styles.dateText : styles.datePlaceholder}>
+              {date || 'Select Date Found'}
+            </Text>
+          </TouchableOpacity>
+
+          {showDatePicker && (
+            <DateTimePicker
+              value={date ? new Date(date) : new Date()}
+              mode="date"
+              display="default"
+              onChange={handleDateChange}
+              maximumDate={new Date()}
+            />
+          )}
 
           <TextInput 
             style={[styles.input, styles.elevatedInput]} 
@@ -581,13 +628,13 @@ const FoundItemPage: React.FC = () => {
         <View style={styles.sectionContainer}>
           <Text style={styles.sectionTitle}>Report to Authorities</Text>
           <Text style={styles.reportDescription}>
-            Found a high-value item? Report it to local authorities for proper handling.
+            Founda valuable item? File a police report for additional security and documentation.
           </Text>
           <TouchableOpacity 
             style={styles.reportButton}
             onPress={() => Alert.alert(
               'Contact Authorities',
-              'Would you like to contact local law enforcement about this item?',
+              'Would you like to file a police report for this Found item?',
               [
                 {
                   text: 'Call Police',
@@ -610,20 +657,11 @@ const FoundItemPage: React.FC = () => {
             >
               <View style={styles.reportButtonContent}>
                 <MaterialIcons name="local-police" size={24} color="#fff" />
-                <Text style={styles.reportButtonText}>Contact Law Enforcement</Text>
+                <Text style={styles.reportButtonText}>File Police Report</Text>
               </View>
             </LinearGradient>
           </TouchableOpacity>
         </View>
-
-        <LocationModal 
-          visible={locationModalVisible}
-          onClose={handleCloseModal}
-          searchQuery={searchQuery}
-          onSearchChange={handleSearchChange}
-          onSearch={handleSearchLocation}
-          onCurrentLocation={handleCurrentLocation}
-        />
 
         <TouchableOpacity 
           style={[styles.submitButton, loading && styles.disabledButton]} 
@@ -635,6 +673,15 @@ const FoundItemPage: React.FC = () => {
           </Text>
         </TouchableOpacity>
       </View>
+
+      <LocationModal 
+        visible={locationModalVisible}
+        onClose={handleCloseModal}
+        searchQuery={searchQuery}
+        onSearchChange={handleSearchChange}
+        onSearch={handleSearchLocation}
+        onCurrentLocation={handleCurrentLocation}
+      />
     </ScrollView>
   );
 };
@@ -648,9 +695,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#2c3e50',
     padding: 30,
     paddingTop: 30,
-   
-    borderTopLeftRadius: 30,
-    borderBottomRightRadius: 30,
+    borderBottomLeftRadius: 30,
+    //borderBottomRightRadius: 30,
+    borderTopRightRadius: 30,
+    //borderTopLeftRadius: 30,
     marginBottom: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -699,14 +747,6 @@ const styles = StyleSheet.create({
   },
   picker: {
     height: 50,
-  },
-  elevatedInput: {
-    backgroundColor: '#fff',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
   },
   input: {
     height: 50,
@@ -758,14 +798,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderRadius: 12,
   },
-  mapContainer: {
-    borderRadius: 8,
-    overflow: 'hidden',
-    marginTop: 10,
-  },
-  map: {
-    width: '100%',
+  map: { 
+    width: '100%', 
     height: 200,
+    marginVertical: 10,
+    borderRadius: 8 
   },
   locationButton: {
     backgroundColor: '#ff6b6b',
@@ -874,6 +911,20 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: 'bold',
   },
+  elevatedInput: {
+    backgroundColor: '#fff',
+    borderColor: '#ccc',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+  },
+  mapContainer: {
+    width: '100%',
+    height: 200,
+    marginVertical: 10,
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
   disabledButton: {
     backgroundColor: '#ccc',
   },
@@ -905,6 +956,16 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
+  },
+  dateText: {
+    color: '#000',
+    fontSize: 16,
+    padding: 10,
+  },
+  datePlaceholder: {
+    color: '#666',
+    fontSize: 16,
+    padding: 10,
   },
 });
 

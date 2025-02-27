@@ -13,6 +13,7 @@ import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialIcons } from '@expo/vector-icons';
+import DateTimePicker from '@react-native-community/datetimepicker';
 
 type RootStackParamList = {
   Home: undefined;
@@ -73,7 +74,8 @@ type LostItem = {
 
 type PhotoSource = 'camera' | 'library';
 
-const bucketName = 'items-photos';
+// Make sure bucket name is consistent
+const bucketName = 'lost-items-photos';
 
 const LocationModal: React.FC<LocationModalProps> = ({ 
   visible, 
@@ -154,6 +156,7 @@ const LostItemPage: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const mapRef = useRef<MapView | null>(null);
+  const [showDatePicker, setShowDatePicker] = useState(false);
 
   const categories = ['Electronics', 'Gadgets', 'Clothing', 'Documents', 'Wallet', 'Keys', 'Other'];
 
@@ -177,58 +180,41 @@ const LostItemPage: React.FC = () => {
       console.log('Starting image upload process...');
       console.log('Image URI:', uri);
 
-      // Get current session first
+      // Ensure the URI is valid and accessible
+      const response = await fetch(uri);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch image: ${response.statusText}`);
+      }
+
+      // Convert the image to a blob
+      const blob = await response.blob();
+      console.log('Blob created:', blob);
+
+      // Temporarily return the local URI instead of uploading to Supabase
+      return uri;
+
+      /* Commenting out Supabase upload code
+      // Get the current session
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
       if (sessionError || !session) {
         console.error('Session error:', sessionError);
         throw new Error('Authentication required for upload');
       }
 
-      // Read the file as base64
-      console.log('Converting image to base64...');
-      const response = await fetch(uri);
-      const blob = await response.blob();
-      const base64Data = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-          if (typeof reader.result === 'string') {
-            // Remove the data URL prefix (e.g., "data:image/jpeg;base64,")
-            const base64 = reader.result.split(',')[1];
-            resolve(base64);
-          } else {
-            reject(new Error('Failed to convert to base64'));
-          }
-        };
-        reader.onerror = () => reject(reader.error);
-        reader.readAsDataURL(blob);
-      });
-
-      // Get file extension from blob type
+      // Generate a unique filename
       const fileExt = blob.type.split('/')[1] || 'jpg';
-      console.log('File extension:', fileExt);
-
-      // Generate unique filename
       const timestamp = Date.now();
       const randomString = Math.random().toString(36).substring(7);
       const fileName = `lost/${session.user.id}/${timestamp}_${randomString}.${fileExt}`;
       console.log('Generated filename:', fileName);
 
-      // Convert base64 to Uint8Array
-      console.log('Converting base64 to Uint8Array...');
-      const binaryStr = atob(base64Data);
-      const bytes = new Uint8Array(binaryStr.length);
-      for (let i = 0; i < binaryStr.length; i++) {
-        bytes[i] = binaryStr.charCodeAt(i);
-      }
-
-      // Upload to Supabase storage
-      console.log('Starting Supabase upload...');
-      const { error: uploadError, data: uploadData } = await supabase.storage
+      // Upload the image to Supabase Storage
+      const { error: uploadError } = await supabase.storage
         .from('lost-items-photos')
-        .upload(fileName, bytes, {
+        .upload(fileName, blob, {
           contentType: blob.type,
           cacheControl: '3600',
-          upsert: false
+          upsert: false,
         });
 
       if (uploadError) {
@@ -236,19 +222,40 @@ const LostItemPage: React.FC = () => {
         throw new Error(`Upload failed: ${uploadError.message}`);
       }
 
-      console.log('Upload successful:', uploadData);
-
-      // Get the public URL
+      // Get the public URL of the uploaded image
       const { data: { publicUrl } } = supabase.storage
         .from('lost-items-photos')
         .getPublicUrl(fileName);
 
       console.log('Public URL generated:', publicUrl);
       return publicUrl;
+      */
 
     } catch (error: any) {
       console.error('Upload error details:', error);
       throw new Error(error?.message || 'Failed to upload image');
+    }
+  };
+
+  const ensureFileUri = (uri: string): string => {
+    if (!uri.startsWith('file://')) {
+      return `file://${uri}`;
+    }
+    return uri;
+  };
+
+  const testImageAccess = async (uri: string) => {
+    try {
+      const response = await fetch(uri);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch image: ${response.statusText}`);
+      }
+      const blob = await response.blob();
+      console.log('Image is accessible. Blob:', blob);
+      return true;
+    } catch (error) {
+      console.error('Image access error:', error);
+      return false;
     }
   };
 
@@ -285,31 +292,6 @@ const LostItemPage: React.FC = () => {
     }
   };
 
-  const takePhoto = async () => {
-    try {
-      const result = await ImagePicker.launchCameraAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [4, 3],
-        quality: 0.8,
-      });
-
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        const selectedAsset = result.assets[0];
-        console.log('Camera photo taken:', {
-          uri: selectedAsset.uri,
-          width: selectedAsset.width,
-          height: selectedAsset.height,
-        });
-        
-        setPhotos([...photos, selectedAsset.uri]);
-      }
-    } catch (error) {
-      console.error('Camera error:', error);
-      Alert.alert('Error', 'Failed to take photo. Please try again.');
-    }
-  };
-
   const pickFromLibrary = async () => {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
@@ -321,17 +303,50 @@ const LostItemPage: React.FC = () => {
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const selectedAsset = result.assets[0];
-        console.log('Library photo selected:', {
-          uri: selectedAsset.uri,
-          width: selectedAsset.width,
-          height: selectedAsset.height,
-        });
-        
-        setPhotos([...photos, selectedAsset.uri]);
+        const uri = ensureFileUri(selectedAsset.uri); // Ensure the URI starts with 'file://'
+        console.log('Selected image URI:', uri);
+
+        // Test if the URI is accessible
+        const isAccessible = await testImageAccess(uri);
+        if (!isAccessible) {
+          throw new Error('Image URI is not accessible');
+        }
+
+        // Add the URI to the photos state
+        setPhotos([...photos, uri]);
       }
     } catch (error) {
       console.error('Photo library error:', error);
       Alert.alert('Error', 'Failed to select photo from library. Please try again.');
+    }
+  };
+
+  const takePhoto = async () => {
+    try {
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const selectedAsset = result.assets[0];
+        const uri = ensureFileUri(selectedAsset.uri); // Ensure the URI starts with 'file://'
+        console.log('Camera photo URI:', uri);
+
+        // Test if the URI is accessible
+        const isAccessible = await testImageAccess(uri);
+        if (!isAccessible) {
+          throw new Error('Image URI is not accessible');
+        }
+
+        // Add the URI to the photos state
+        setPhotos([...photos, uri]);
+      }
+    } catch (error) {
+      console.error('Camera error:', error);
+      Alert.alert('Error', 'Failed to take photo. Please try again.');
     }
   };
 
@@ -439,208 +454,92 @@ const LostItemPage: React.FC = () => {
 
   const handleSubmit = async () => {
     console.log('Starting form submission process...');
-    console.log('Validating form fields...');
-    
+
     // Validate all required fields
-    if (!itemName || !category || !description || !date || !contactDetails || photos.length === 0 || !selectedLocation) {
-      console.log('Form validation failed:', {
-        hasItemName: !!itemName,
-        hasCategory: !!category,
-        hasDescription: !!description,
-        hasDate: !!date,
-        hasContactDetails: !!contactDetails,
-        photoCount: photos.length,
-        hasLocation: !!selectedLocation
-      });
+    if (!itemName || !category || !description || !date || !contactDetails || !selectedLocation) {
       Alert.alert('Error', 'Please fill all fields, upload a photo, and select a location.');
       return;
     }
 
-    console.log('Form validation passed');
-
     try {
       setLoading(true);
-      console.log('Checking authentication status...');
 
       // Check authentication
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      if (sessionError) {
-        console.error('Session error:', sessionError);
-        throw new Error('Authentication check failed: ' + sessionError.message);
-      }
-      if (!session) {
-        console.error('No active session found');
-        throw new Error('Please sign in to report a lost item');
+      if (sessionError || !session) {
+        throw new Error('Authentication required. Please sign in.');
       }
 
-      console.log('Authentication successful');
-      console.log('User ID:', session.user.id);
-      console.log('User email:', session.user.email);
+      // Process photos locally only
+      // const photoUrls = [];
+      // for (const [index, photo] of photos.entries()) {
+      //   try {
+      //     console.log(`Processing photo ${index + 1}/${photos.length}...`);
+      //     const url = await uploadImage(photo);
+      //     photoUrls.push(url);
+      //     console.log(`Photo ${index + 1} processed successfully:`, url);
+      //   } catch (error) {
+      //     console.error(`Error processing photo ${index + 1}:`, error);
+      //     throw new Error(`Failed to process photo ${index + 1}. Please try again.`);
+      //   }
+      // }
 
-      // Upload photos and get their URLs
-      console.log('Starting photo upload process...');
-      const photoUrls = [];
-      for (const [index, photo] of photos.entries()) {
-        try {
-          console.log(`Uploading photo ${index + 1}/${photos.length}...`);
-          const url = await uploadImage(photo);
-          photoUrls.push(url);
-          console.log(`Photo ${index + 1} uploaded successfully:`, url);
-        } catch (error) {
-          console.error(`Error uploading photo ${index + 1}:`, error);
-          throw new Error(`Failed to upload photo ${index + 1}. Please try again.`);
-        }
-      }
-      console.log('All photos uploaded successfully');
-
-      // Prepare location data
-      console.log('Preparing location data...');
-      const locationData = {
-        latitude: selectedLocation.latitude,
-        longitude: selectedLocation.longitude,
-      };
-      console.log('Location data:', locationData);
-
-      // Validate and format date
-      console.log('Validating and formatting date...');
-      const dateObj = new Date(date);
-      if (isNaN(dateObj.getTime())) {
-        throw new Error('Invalid date format. Please use YYYY-MM-DD format.');
-      }
-      const formattedDate = dateObj.toISOString().split('T')[0];
-      console.log('Formatted date:', formattedDate);
-
-      // Validate category
-      if (!categories.includes(category)) {
-        throw new Error('Invalid category selected.');
-      }
-
-      // Prepare the item data
-      const lostItemData: Omit<LostItem, 'id' | 'created_at' | 'updated_at'> = {
+      // Prepare and send data to Supabase (excluding actual photo files)
+      const lostItemData = {
         user_id: session.user.id,
         item_name: itemName.trim(),
         category: category.trim(),
         description: description.trim(),
-        date_lost: formattedDate,
+        date_lost: new Date(date).toISOString().split('T')[0],
         contact_details: contactDetails.trim(),
-        photos: photoUrls,
-        location: locationData,
-        status: 'active'
+        // photos: photoUrls, // These will be local URIs only
+        location: {
+          latitude: selectedLocation.latitude,
+          longitude: selectedLocation.longitude,
+        },
+        status: 'active',
       };
 
-      console.log('Prepared lost item data:', JSON.stringify(lostItemData, null, 2));
+      // Insert the data into Supabase
+      const { data, error } = await supabase
+        .from('lost')
+        .insert([lostItemData])
+        .select();
 
-      // Insert into Supabase
-      try {
-        console.log('Attempting to insert data into Supabase...');
-        
-        // First, check if the table exists and has the correct structure
-        const { error: tableCheckError } = await supabase
-          .from('lost')
-          .select(`
-            id,
-            created_at,
-            user_id,
-            item_name,
-            category,
-            description,
-            date_lost,
-            contact_details,
-            photos,
-            location,
-            status,
-            updated_at
-          `)
-          .limit(1);
-
-        if (tableCheckError) {
-          console.error('Table check error:', tableCheckError);
-          if (tableCheckError.code === '42P01') {
-            throw new Error('The lost items table does not exist. Please run the table creation SQL first.');
-          } else if (tableCheckError.code === '42703') {
-            throw new Error('The lost items table structure is incorrect. Please verify the table schema.');
-          }
-        }
-
-        // Proceed with insert
-        const { data, error } = await supabase
-          .from('lost')
-          .insert([lostItemData])
-          .select();
-
-        console.log('Supabase response:', { data, error });
-
-        if (error) {
-          console.error('Supabase error:', {
-            message: error.message,
-            details: error.details,
-            hint: error.hint,
-            code: error.code
-          });
-
-          // Handle specific error cases
-          switch (error.code) {
-            case '42P01':
-              throw new Error('Lost items table not found. Please create the table first.');
-            case '23505':
-              throw new Error('This item has already been reported.');
-            case '23503':
-              throw new Error('User account not found. Please sign in again.');
-            case '42703':
-              throw new Error('Database schema mismatch. Please check the table structure.');
-            default:
-              throw new Error(error.message || 'Failed to save item details. Please try again.');
-          }
-        }
-
-        if (!data || data.length === 0) {
-          console.error('No data returned from insert operation');
-          throw new Error('Failed to save item details: No data returned');
-        }
-
-        console.log('Lost item saved successfully:', JSON.stringify(data, null, 2));
-
-        Alert.alert(
-          'Success', 
-          'Lost item posted successfully!',
-          [{ text: 'OK', onPress: () => {
-            console.log('Navigating back...');
-            router.back();
-          }}]
-        );
-
-        // Reset form
-        console.log('Resetting form...');
-        setItemName('');
-        setCategory('');
-        setDescription('');
-        setDate('');
-        setContactDetails('');
-        setPhotos([]);
-        setSelectedLocation(null);
-        setLocation(null);
-        console.log('Form reset complete');
-
-      } catch (dbError: any) {
-        console.error('Database operation error:', dbError);
-        console.error('Error stack:', dbError?.stack);
-        console.error('Error details:', {
-          name: dbError?.name,
-          code: dbError?.code,
-          message: dbError?.message
-        });
-        throw new Error(`Database error: ${dbError?.message || 'Unknown database error'}`);
+      if (error) {
+        console.error('Supabase error:', error);
+        throw new Error(error.message || 'Failed to save item details.');
       }
 
-    } catch (error) {
+      console.log('Lost item saved successfully:', JSON.stringify(data, null, 2));
+
+      Alert.alert('Success', 'Lost item report created!', [
+        { text: 'OK', onPress: () => router.back() },
+      ]);
+
+      // Reset the form
+      setItemName('');
+      setCategory('');
+      setDescription('');
+      setDate('');
+      setContactDetails('');
+      setPhotos([]);
+      setSelectedLocation(null);
+      setLocation(null);
+
+    } catch (error: unknown) {
       console.error('Submission error:', error);
-      console.error('Full error object:', JSON.stringify(error, null, 2));
       const errorMessage = error instanceof Error ? error.message : 'Failed to submit lost item. Please try again.';
-      console.error('Final error message:', errorMessage);
       Alert.alert('Error', errorMessage);
     } finally {
-      console.log('Submission process completed');
       setLoading(false);
+    }
+  };
+
+  const handleDateChange = (event: any, selectedDate?: Date) => {
+    setShowDatePicker(false);
+    if (selectedDate) {
+      setDate(selectedDate.toISOString().split('T')[0]);
     }
   };
 
@@ -684,13 +583,24 @@ const LostItemPage: React.FC = () => {
 
         <View style={styles.sectionContainer}>
           <Text style={styles.sectionTitle}>Date & Contact</Text>
-          <TextInput 
-            style={[styles.input, styles.elevatedInput]} 
-            placeholder="Date Lost (YYYY-MM-DD)" 
-            value={date} 
-            onChangeText={setDate}
-            placeholderTextColor="#666" 
-          />
+          <TouchableOpacity 
+            style={[styles.input, styles.elevatedInput]}
+            onPress={() => setShowDatePicker(true)}
+          >
+            <Text style={date ? styles.dateText : styles.datePlaceholder}>
+              {date || 'Select Date Lost'}
+            </Text>
+          </TouchableOpacity>
+
+          {showDatePicker && (
+            <DateTimePicker
+              value={date ? new Date(date) : new Date()}
+              mode="date"
+              display="default"
+              onChange={handleDateChange}
+              maximumDate={new Date()}
+            />
+          )}
 
           <TextInput 
             style={[styles.input, styles.elevatedInput]} 
@@ -1073,6 +983,16 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
+  },
+  dateText: {
+    color: '#000',
+    fontSize: 16,
+    padding: 10,
+  },
+  datePlaceholder: {
+    color: '#666',
+    fontSize: 16,
+    padding: 10,
   },
 });
 
