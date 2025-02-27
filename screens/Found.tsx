@@ -77,6 +77,23 @@ type PhotoSource = 'camera' | 'library';
 // Make sure bucket name is consistent
 const bucketName = 'lost-items-photos';
 
+const calculateDistance = (
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number
+): number => {
+  const R = 6371; // Earth's radius in km
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = 
+    Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+    Math.sin(dLon/2) * Math.sin(dLon/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return R * c; // Distance in km
+};
+
 const LocationModal: React.FC<LocationModalProps> = ({ 
   visible, 
   onClose, 
@@ -473,21 +490,70 @@ const FoundItemPage: React.FC = () => {
         status: 'active',
       };
 
-      // Insert the data into Supabase
-      const { data, error } = await supabase
+      // First save the found item
+      const { data: foundItem, error: foundError } = await supabase
         .from('found')
         .insert([foundItemData])
         .select();
 
-      if (error) {
-        console.error('Supabase error:', error);
-        throw new Error(error.message || 'Failed to save item details.');
+      if (foundError) throw foundError;
+
+      // Check for potential matches in the lost items
+      const { data: lostItems, error: lostError } = await supabase
+        .from('lost')
+        .select('*')
+        .eq('status', 'active');
+
+      if (lostError) throw lostError;
+
+      // Check each lost item for a potential match
+      const matches = lostItems.filter(lostItem => {
+        const nameMatch = lostItem.item_name.toLowerCase().includes(itemName.toLowerCase()) ||
+                         itemName.toLowerCase().includes(lostItem.item_name.toLowerCase());
+        
+        const categoryMatch = lostItem.category === category;
+        
+        const distance = calculateDistance(
+          lostItem.location.latitude,
+          lostItem.location.longitude,
+          selectedLocation.latitude,
+          selectedLocation.longitude
+        );
+        const locationMatch = distance < 1; // Within 1km
+
+        return (nameMatch && categoryMatch) || (nameMatch && locationMatch);
+      });
+
+      if (matches.length > 0) {
+        // Create notifications for matches
+        const notifications = matches.map(match => ({
+          user_id: match.user_id,
+          type: 'match',
+          title: 'Potential Match Found',
+          message: `Someone found an item that matches your lost ${match.item_name}!`,
+          related_items: {
+            lost_item_id: match.id,
+            found_item_id: foundItem[0].id
+          },
+          read: false,
+          created_at: new Date().toISOString()
+        }));
+
+        // Insert notifications one by one to handle RLS
+        for (const notification of notifications) {
+          const { error: notificationError } = await supabase
+            .from('notifications')
+            .insert([notification]);
+
+          if (notificationError) {
+            console.error('Error creating notification:', notificationError);
+            // Continue with other notifications even if one fails
+          }
+        }
       }
 
-      console.log('Found item saved successfully:', JSON.stringify(data, null, 2));
-
       Alert.alert('Success', 'Found item report created!', [
-        { text: 'OK', onPress: () => router.back() },
+        { text: 'OK', onPress: () => navigation.goBack() }
       ]);
 
       // Reset the form (including photos)

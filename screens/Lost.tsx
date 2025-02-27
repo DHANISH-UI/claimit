@@ -77,6 +77,23 @@ type PhotoSource = 'camera' | 'library';
 // Make sure bucket name is consistent
 const bucketName = 'lost-items-photos';
 
+const calculateDistance = (
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number
+): number => {
+  const R = 6371; // Earth's radius in km
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = 
+    Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+    Math.sin(dLon/2) * Math.sin(dLon/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return R * c; // Distance in km
+};
+
 const LocationModal: React.FC<LocationModalProps> = ({ 
   visible, 
   onClose, 
@@ -470,20 +487,6 @@ const LostItemPage: React.FC = () => {
         throw new Error('Authentication required. Please sign in.');
       }
 
-      // Process photos locally only
-      // const photoUrls = [];
-      // for (const [index, photo] of photos.entries()) {
-      //   try {
-      //     console.log(`Processing photo ${index + 1}/${photos.length}...`);
-      //     const url = await uploadImage(photo);
-      //     photoUrls.push(url);
-      //     console.log(`Photo ${index + 1} processed successfully:`, url);
-      //   } catch (error) {
-      //     console.error(`Error processing photo ${index + 1}:`, error);
-      //     throw new Error(`Failed to process photo ${index + 1}. Please try again.`);
-      //   }
-      // }
-
       // Prepare and send data to Supabase (excluding actual photo files)
       const lostItemData = {
         user_id: session.user.id,
@@ -492,7 +495,6 @@ const LostItemPage: React.FC = () => {
         description: description.trim(),
         date_lost: new Date(date).toISOString().split('T')[0],
         contact_details: contactDetails.trim(),
-        // photos: photoUrls, // These will be local URIs only
         location: {
           latitude: selectedLocation.latitude,
           longitude: selectedLocation.longitude,
@@ -500,22 +502,74 @@ const LostItemPage: React.FC = () => {
         status: 'active',
       };
 
-      // Insert the data into Supabase
-      const { data, error } = await supabase
+      // First save the lost item
+      const { data: lostItem, error: lostError } = await supabase
         .from('lost')
         .insert([lostItemData])
         .select();
 
-      if (error) {
-        console.error('Supabase error:', error);
-        throw new Error(error.message || 'Failed to save item details.');
+      if (lostError) throw lostError;
+
+      // Check for potential matches in the found items
+      const { data: foundItems, error: foundError } = await supabase
+        .from('found')
+        .select('*')
+        .eq('status', 'active');
+
+      if (foundError) throw foundError;
+
+      // Check each found item for a potential match
+      const matches = foundItems.filter(foundItem => {
+        const nameMatch = foundItem.item_name.toLowerCase().includes(itemName.toLowerCase()) ||
+                         itemName.toLowerCase().includes(foundItem.item_name.toLowerCase());
+        
+        const categoryMatch = foundItem.category === category;
+        
+        const distance = calculateDistance(
+          foundItem.location.latitude,
+          foundItem.location.longitude,
+          selectedLocation.latitude,
+          selectedLocation.longitude
+        );
+        const locationMatch = distance < 1; // Within 1km
+
+        return (nameMatch && categoryMatch) || (nameMatch && locationMatch);
+      });
+
+      if (matches.length > 0) {
+        // Create notifications for matches
+        const notifications = matches.map(match => ({
+          user_id: session.user.id,
+          type: 'match',
+          title: 'Potential Match Found',
+          message: `We found a potential match for your ${itemName}!`,
+          related_items: {
+            lost_item_id: lostItem[0].id,
+            found_item_id: match.id
+          },
+          read: false,
+          created_at: new Date().toISOString()
+        }));
+
+        // Insert notifications one by one to handle RLS
+        for (const notification of notifications) {
+          const { error: notificationError } = await supabase
+            .from('notifications')
+            .insert([notification]);
+
+          if (notificationError) {
+            console.error('Error creating notification:', notificationError);
+            // Continue with other notifications even if one fails
+          }
+        }
       }
 
-      console.log('Lost item saved successfully:', JSON.stringify(data, null, 2));
-
-      Alert.alert('Success', 'Lost item report created!', [
-        { text: 'OK', onPress: () => router.back() },
-      ]);
+      Alert.alert(
+        'Success', 
+        'Lost item report created! ' + 
+        (matches.length > 0 ? 'We found some potential matches!' : ''),
+        [{ text: 'OK', onPress: () => router.back() }]
+      );
 
       // Reset the form
       setItemName('');

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,77 +6,165 @@ import {
   ScrollView,
   TouchableOpacity,
   SafeAreaView,
+  Alert,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
+import { useRouter, useNavigation } from 'expo-router';
+import { supabase } from '../lib/supabase';
 
-export default function NotificationPage(): JSX.Element {
+// Update the Notification type
+type Notification = {
+  id: string;
+  user_id: string;
+  type: string;
+  title: string;
+  message: string;
+  related_items: {
+    lost_item_id?: string;  // Changed from lost_id
+    found_item_id?: string; // Changed from found_id
+  };
+  read: boolean;           // Changed from status
+  created_at: string;
+};
+
+const NotificationPage: React.FC = () => {
   const router = useRouter();
-  const notifications = [
-    {
-      id: 1,
-      type: 'match',
-      title: 'Potential Match Found',
-      message: 'We found a match for your lost laptop. Check it out!',
-      time: '2 hours ago',
-      icon: 'search',
-      color: '#4ecdc4',
-      unread: true,
-    },
-    {
-      id: 2,
-      type: 'update',
-      title: 'Status Update',
-      message: 'Someone responded to your lost item report.',
-      time: '5 hours ago',
-      icon: 'notifications-active',
-      color: '#ff6b6b',
-      unread: true,
-    },
-    {
-      id: 3,
-      type: 'info',
-      title: 'Tips & Tricks',
-      message: 'Learn how to increase your chances of finding lost items.',
-      time: '1 day ago',
-      icon: 'lightbulb',
-      color: '#ffd93d',
-      unread: false,
-    },
-    {
-      id: 4,
-      type: 'success',
-      title: 'Item Returned',
-      message: 'Congratulations! Your lost wallet has been found.',
-      time: '2 days ago',
-      icon: 'check-circle',
-      color: '#6c5ce7',
-      unread: false,
-    },
-  ];
+  const navigation = useNavigation();
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const renderNotification = (notification: any) => (
+  useEffect(() => {
+    fetchNotifications();
+  }, []);
+
+  const fetchNotifications = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const { data, error } = await supabase
+        .from('notifications')
+        .select('*')
+        .eq('user_id', session.user.id)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      setNotifications(data || []);
+    } catch (error) {
+      console.error('Error fetching notifications:', error);
+      Alert.alert('Error', 'Failed to load notifications');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteNotification = async (notificationId: string) => {
+    try {
+      const { error } = await supabase
+        .from('notifications')
+        .delete()
+        .eq('id', notificationId);
+
+      if (error) throw error;
+
+      // Update local state to remove the deleted notification
+      setNotifications(prev => prev.filter(n => n.id !== notificationId));
+    } catch (error) {
+      console.error('Error deleting notification:', error);
+      Alert.alert('Error', 'Failed to delete notification');
+    }
+  };
+
+  const renderNotification = (notification: Notification) => (
     <TouchableOpacity 
       key={notification.id}
       style={[
         styles.notificationCard,
-        notification.unread && styles.unreadCard
+        !notification.read && styles.unreadCard
       ]}
     >
-      <View style={[styles.iconContainer, { backgroundColor: notification.color }]}>
-        <MaterialIcons name={notification.icon} size={24} color="#fff" />
+      <View style={[styles.iconContainer, { backgroundColor: getNotificationColor(notification.type) }]}>
+        <MaterialIcons name={getNotificationIcon(notification.type)} size={24} color="#fff" />
       </View>
       <View style={styles.notificationContent}>
         <View style={styles.notificationHeader}>
           <Text style={styles.notificationTitle}>{notification.title}</Text>
-          <Text style={styles.notificationTime}>{notification.time}</Text>
+          <View style={styles.headerActions}>
+            <Text style={styles.notificationTime}>
+              {formatTimestamp(notification.created_at)}
+            </Text>
+            <TouchableOpacity 
+              onPress={() => {
+                Alert.alert(
+                  'Delete Notification',
+                  'Are you sure you want to delete this notification?',
+                  [
+                    { text: 'Cancel', style: 'cancel' },
+                    { 
+                      text: 'Delete', 
+                      onPress: () => handleDeleteNotification(notification.id),
+                      style: 'destructive'
+                    }
+                  ]
+                );
+              }}
+              style={styles.deleteButton}
+            >
+              <MaterialIcons name="delete-outline" size={20} color="#ff6b6b" />
+            </TouchableOpacity>
+          </View>
         </View>
         <Text style={styles.notificationMessage}>{notification.message}</Text>
       </View>
-      {notification.unread && <View style={styles.unreadDot} />}
+      {!notification.read && <View style={styles.unreadDot} />}
     </TouchableOpacity>
   );
+
+  const getNotificationColor = (type: string) => {
+    switch (type) {
+      case 'match':
+        return '#4ecdc4';
+      case 'update':
+        return '#ff6b6b';
+      case 'info':
+        return '#ffd93d';
+      case 'success':
+        return '#6c5ce7';
+      default:
+        return '#4ecdc4';
+    }
+  };
+
+  const getNotificationIcon = (type: string) => {
+    switch (type) {
+      case 'match':
+        return 'search';
+      case 'update':
+        return 'notifications-active';
+      case 'info':
+        return 'lightbulb';
+      case 'success':
+        return 'check-circle';
+      default:
+        return 'notifications';
+    }
+  };
+
+  const formatTimestamp = (timestamp: string) => {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diff = now.getTime() - date.getTime();
+    
+    const minutes = Math.floor(diff / 60000);
+    const hours = Math.floor(minutes / 60);
+    const days = Math.floor(hours / 24);
+
+    if (minutes < 60) return `${minutes}m ago`;
+    if (hours < 24) return `${hours}h ago`;
+    return `${days}d ago`;
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -105,7 +193,7 @@ export default function NotificationPage(): JSX.Element {
       </ScrollView>
     </SafeAreaView>
   );
-}
+};
 
 const styles = StyleSheet.create({
   container: {
@@ -182,6 +270,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#2c3e50',
+    flex: 1,
   },
   notificationTime: {
     fontSize: 12,
@@ -206,4 +295,14 @@ const styles = StyleSheet.create({
     zIndex: 1,
     padding: 8,
   },
-}); 
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  deleteButton: {
+    padding: 4,
+  },
+});
+
+export default NotificationPage; 
