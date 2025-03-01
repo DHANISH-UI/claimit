@@ -44,6 +44,7 @@ const ChatRoom: React.FC = () => {
 
   const fetchMessages = async () => {
     try {
+      console.log('Fetching messages for room:', roomId);
       const { data, error } = await supabase
         .from('messages')
         .select('*')
@@ -51,6 +52,7 @@ const ChatRoom: React.FC = () => {
         .order('created_at', { ascending: true });
 
       if (error) throw error;
+      console.log('Fetched messages:', data?.length);
       setMessages(data || []);
     } catch (error) {
       console.error('Error fetching messages:', error);
@@ -68,7 +70,7 @@ const ChatRoom: React.FC = () => {
           event: 'INSERT',
           schema: 'public',
           table: 'messages',
-          filter: `chat_room_id=eq.${roomId}`,
+          filter: `chat_room_id=eq.${roomId}`, // Only filter by chat room, not user
         },
         (payload) => {
           setMessages((current) => [...current, payload.new as Message]);
