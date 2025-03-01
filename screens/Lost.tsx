@@ -541,8 +541,8 @@ const LostItemPage: React.FC = () => {
         const notifications = matches.map(match => ({
           user_id: match.user_id,
           type: 'match',
-          title: 'Potential Match Found',
-          message: `Someone lost an item that matches your found ${match.item_name}!`,
+          title: 'Match with Found Item',
+          message: `Your found item matches with someone's lost ${itemName}!`,
           related_items: {
             lost_item_id: lostItem[0].id,
             found_item_id: match.id

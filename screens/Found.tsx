@@ -516,19 +516,33 @@ const FoundItemPage: React.FC = () => {
       if (matches && matches.length > 0) {
         console.log('Creating notifications for matches...');
         
-        // Create notifications for matches
-        const notifications = matches.map(match => ({
-          user_id: match.user_id,
-          type: 'match',
-          title: 'Potential Match Found',
-          message: `Someone found an item that matches your lost ${match.item_name}!`,
-          related_items: {
-            lost_item_id: match.id,
-            found_item_id: foundItem[0].id
+        // Get current user ID first
+        const { data: { user } } = await supabase.auth.getUser();
+        const currentUserId = user?.id;
+        
+        // Create notifications for both parties
+        const notifications = matches.flatMap(match => [
+          // Notification for lost item owner
+          {
+            user_id: match.user_id,
+            type: 'match',
+            title: 'Potential Match Found',
+            message: `Someone found an item that matches your lost ${match.item_name}!`,
+            related_items: { lost_item_id: match.id, found_item_id: foundItem[0].id },
+            read: false,
+            created_at: new Date().toISOString()
           },
-          read: false,
-          created_at: new Date().toISOString()
-        }));
+          // Notification for finder
+          {
+            user_id: currentUserId,  // Use stored user ID
+            type: 'match',
+            title: 'Match with Lost Item',
+            message: `Your found item matches with someone's lost ${match.item_name}!`,
+            related_items: { lost_item_id: match.id, found_item_id: foundItem[0].id },
+            read: false,
+            created_at: new Date().toISOString()
+          }
+        ]);
 
         // Insert notifications
         for (const notification of notifications) {

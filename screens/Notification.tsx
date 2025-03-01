@@ -121,51 +121,59 @@ const NotificationPage: React.FC = () => {
     }
   };
 
-  const renderNotification = (notification: Notification) => (
-    <TouchableOpacity 
-      key={notification.id}
-      style={[
-        styles.notificationCard,
-        !notification.read && styles.unreadCard
-      ]}
-    >
-      <View style={[styles.iconContainer, { backgroundColor: getNotificationColor(notification.type) }]}>
-        <MaterialIcons name={getNotificationIcon(notification.type)} size={24} color="#fff" />
-      </View>
-      <View style={styles.notificationContent}>
-        <View style={styles.notificationHeader}>
-          <Text style={styles.notificationTitle}>{notification.title}</Text>
-          <Text style={styles.notificationTime}>
-            {formatTimestamp(notification.created_at)}
-          </Text>
+  const renderNotification = (notification: Notification) => {
+    // Check if current user is the finder or the person who lost the item
+    const isLostItemOwner = notification.related_items.lost_item_id && 
+      notification.message.includes("matches your lost");
+
+    return (
+      <TouchableOpacity 
+        key={notification.id}
+        style={[
+          styles.notificationCard,
+          !notification.read && styles.unreadCard
+        ]}
+      >
+        <View style={[styles.iconContainer, { backgroundColor: getNotificationColor(notification.type) }]}>
+          <MaterialIcons name={getNotificationIcon(notification.type)} size={24} color="#fff" />
         </View>
-        <View style={styles.messageContainer}>
-          <Text style={styles.notificationMessage}>{notification.message}</Text>
-          <TouchableOpacity 
-            onPress={() => handleDeleteNotification(notification.id)}
-            style={styles.deleteButton}
-          >
-            <MaterialIcons name="delete-outline" size={20} color="#ff6b6b" />
-          </TouchableOpacity>
-        </View>
-        {notification.type === 'match' && (
-          <TouchableOpacity 
-            style={styles.chatButton}
-            onPress={() => handleChatNow(notification)}
-          >
-            <LinearGradient
-              colors={['#4ecdc4', '#45b7af']}
-              style={styles.chatButtonGradient}
+        <View style={styles.notificationContent}>
+          <View style={styles.notificationHeader}>
+            <Text style={styles.notificationTitle}>{notification.title}</Text>
+            <Text style={styles.notificationTime}>
+              {formatTimestamp(notification.created_at)}
+            </Text>
+          </View>
+          <View style={styles.messageContainer}>
+            <Text style={styles.notificationMessage}>{notification.message}</Text>
+            <TouchableOpacity 
+              onPress={() => handleDeleteNotification(notification.id)}
+              style={styles.deleteButton}
             >
-              <MaterialIcons name="chat" size={20} color="#fff" />
-              <Text style={styles.chatButtonText}>Chat with Finder</Text>
-            </LinearGradient>
-          </TouchableOpacity>
-        )}
-      </View>
-      {!notification.read && <View style={styles.unreadDot} />}
-    </TouchableOpacity>
-  );
+              <MaterialIcons name="delete-outline" size={20} color="#ff6b6b" />
+            </TouchableOpacity>
+          </View>
+          {notification.type === 'match' && (
+            <TouchableOpacity 
+              style={styles.chatButton}
+              onPress={() => handleChatNow(notification)}
+            >
+              <LinearGradient
+                colors={['#4ecdc4', '#45b7af']}
+                style={styles.chatButtonGradient}
+              >
+                <MaterialIcons name="chat" size={20} color="#fff" />
+                <Text style={styles.chatButtonText}>
+                  {isLostItemOwner ? 'Chat with Finder' : 'Chat with Owner'}
+                </Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          )}
+        </View>
+        {!notification.read && <View style={styles.unreadDot} />}
+      </TouchableOpacity>
+    );
+  };
 
   const getNotificationColor = (type: string) => {
     switch (type) {
