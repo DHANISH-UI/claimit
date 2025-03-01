@@ -100,22 +100,25 @@ const NotificationPage: React.FC = () => {
       const { data: existingRoom } = await supabase
         .from('chat_rooms')
         .select('id')
-        .eq('lost_item_id', notification.related_items.lost_item_id)
-        .eq('found_item_id', notification.related_items.found_item_id)
+        .or(
+          `and(lost_item_id.eq.${notification.related_items.lost_item_id},found_item_id.eq.${notification.related_items.found_item_id}),` +
+          `and(lost_item_id.eq.${notification.related_items.found_item_id},found_item_id.eq.${notification.related_items.lost_item_id})`
+        )
         .single();
 
-      let roomId: string;
+      let roomId: string | undefined;
       
       if (existingRoom) {
         roomId = existingRoom.id;
+        console.log("Found existing room:", roomId);
       } else {
         const isLostItemOwner = notification.message.includes("matches your lost");
         
-        // Create new chat room
+        // Create new chat room with consistent item placement
         const { data: newRoom, error: createError } = await supabase
           .from('chat_rooms')
           .insert({
-            lost_item_id: notification.related_items.lost_item_id,
+            lost_item_id: notification.related_items.lost_item_id,  // Always use consistent order
             found_item_id: notification.related_items.found_item_id,
             lost_user_id: isLostItemOwner ? session.user.id : notification.user_id,
             found_user_id: isLostItemOwner ? notification.user_id : session.user.id
@@ -129,10 +132,16 @@ const NotificationPage: React.FC = () => {
         roomId = newRoom.id;
       }
 
-      router.push({
-        pathname: "/chat",
-        params: { roomId }
-      });
+      if (roomId) {
+        console.log("Navigating to chat with roomId:", roomId);
+        router.push({
+          pathname: "/chat/[id]",
+          params: { id: roomId }
+        });
+      } else {
+        console.error("No roomId available for chat");
+        Alert.alert('Error', 'Chat room not available');
+      }
 
     } catch (error) {
       console.error('Chat error:', error);

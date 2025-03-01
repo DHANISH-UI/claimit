@@ -8,6 +8,7 @@ import {
   FlatList,
   KeyboardAvoidingView,
   Platform,
+  Alert,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { supabase } from '../lib/supabase';
@@ -71,22 +72,40 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ roomId }) => {
   };
 
   const sendMessage = async () => {
-    if (!newMessage.trim() || !currentUserId || !roomId) return;
+    if (!newMessage.trim() || !currentUserId || !roomId) {
+      console.log('Send validation failed:', { newMessage, currentUserId, roomId });
+      return;
+    }
 
     try {
-      console.log('Sending message to room:', roomId);
-      const { error } = await supabase.from('messages').insert({
+      console.log('Attempting to send message:', {
         chat_room_id: roomId,
-        content: newMessage.trim(),
         sender_id: currentUserId,
-        created_at: new Date().toISOString()
+        content: newMessage.trim()
       });
 
-      if (error) throw error;
+      const { data, error } = await supabase
+        .from('messages')
+        .insert({
+          chat_room_id: roomId,
+          content: newMessage.trim(),
+          sender_id: currentUserId,
+          created_at: new Date().toISOString()
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Send error:', error);
+        throw error;
+      }
+
+      console.log('Message sent successfully:', data);
       setNewMessage('');
       inputRef.current?.clear();
     } catch (error) {
       console.error('Error sending message:', error);
+      Alert.alert('Error', 'Failed to send message');
     }
   };
 

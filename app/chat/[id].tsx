@@ -1,14 +1,14 @@
 import React from 'react';
-import ChatRoomScreen from '../screens/ChatRoom';
+import ChatRoomScreen from '../../screens/ChatRoom';
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { Text } from 'react-native';
 
 export default function ChatPage() {
-  const { roomId } = useLocalSearchParams();
-  console.log("Chat page received roomId:", roomId); // Debug log
+  const { id } = useLocalSearchParams();  // Changed from roomId to id
+  console.log("Chat page received id:", id);
 
-  if (!roomId || typeof roomId !== 'string') {
-    console.log("Invalid roomId:", roomId); // Debug log
+  if (!id || typeof id !== 'string') {
+    console.log("Invalid chat id:", id);
     return <Text>Invalid chat room</Text>;
   }
 
@@ -20,7 +20,7 @@ export default function ChatPage() {
           headerShown: true,
         }} 
       />
-      <ChatRoomScreen roomId={roomId} />
+      <ChatRoomScreen roomId={id} />
     </>
   );
 } 
