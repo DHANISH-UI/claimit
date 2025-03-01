@@ -5,7 +5,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useRouter, Link } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 
 // Define navigation type properly
@@ -97,16 +97,6 @@ const HomePage: React.FC = () => {
         setUserReview('');
     };
 
-    const handleLostPress = () => {
-        console.log('Navigating to Lost page...');
-        router.push({ pathname: '/lost' });
-    };
-
-    const handleFoundPress = () => {
-        console.log('Navigating to Found page...');
-        router.push({ pathname: '/found' });
-    };
-
     return (
         <ScrollView 
             style={styles.container}
@@ -126,14 +116,14 @@ const HomePage: React.FC = () => {
                     <View style={styles.navIcons}>
                         <TouchableOpacity 
                             style={styles.iconButton}
-                            onPress={() => router.push({ pathname: '/notification' })}
+                            onPress={() => router.push('/notification')}
                         >
                             <MaterialIcons name="notifications" size={24} color="#fff" />
                             <View style={styles.notificationBadge} />
                         </TouchableOpacity>
                         <TouchableOpacity 
                             style={styles.iconButton}
-                            onPress={() => router.push({ pathname: '/profile' })}
+                            onPress={() => router.push('/profile')}
                         >
                             <MaterialIcons name="account-circle" size={24} color="#fff" />
                         </TouchableOpacity>
@@ -158,7 +148,7 @@ const HomePage: React.FC = () => {
                 <View style={styles.buttonContainer}>
                     <TouchableOpacity 
                         style={[styles.actionBox, styles.lostBox]}
-                        onPress={handleLostPress}
+                        onPress={() => router.push('/lost')}
                     >
                         <LinearGradient
                             colors={['#ff6b6b', '#ff8787']}
@@ -179,7 +169,7 @@ const HomePage: React.FC = () => {
 
                     <TouchableOpacity 
                         style={[styles.actionBox, styles.foundBox]}
-                        onPress={handleFoundPress}
+                        onPress={() => router.push('/found')}
                     >
                         <LinearGradient
                             colors={['#4ecdc4', '#45b7af']}
@@ -301,7 +291,7 @@ const HomePage: React.FC = () => {
                     <View style={styles.helpOptions}>
                         <TouchableOpacity 
                             style={styles.helpButton}
-                            onPress={() => router.push({ pathname: '/chat-support' })}
+                            onPress={() => router.push('/chat-support')}
                         >
                             <LinearGradient
                                 colors={['#0f172a', '#334155']}
@@ -313,7 +303,7 @@ const HomePage: React.FC = () => {
                         </TouchableOpacity>
                         <TouchableOpacity 
                             style={styles.helpButton}
-                            onPress={() => router.push({ pathname: '/working' })}
+                            onPress={() => router.push('/working')}
                         >
                             <LinearGradient
                                 colors={['#1e293b', '#475569']}

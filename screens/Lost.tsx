@@ -159,7 +159,7 @@ const LocationModal: React.FC<LocationModalProps> = ({
 );
 
 const LostItemPage: React.FC = () => {
-  const navigation = useNavigation<LostScreenNavigationProp>();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const router = useRouter();
   const [itemName, setItemName] = useState('');
   const [category, setCategory] = useState('');
@@ -510,7 +510,7 @@ const LostItemPage: React.FC = () => {
 
       if (lostError) throw lostError;
 
-      // Check for potential matches in the found items
+      // Check for matches in found items
       const { data: foundItems, error: foundError } = await supabase
         .from('found')
         .select('*')
@@ -539,10 +539,10 @@ const LostItemPage: React.FC = () => {
       if (matches.length > 0) {
         // Create notifications for matches
         const notifications = matches.map(match => ({
-          user_id: session.user.id,
+          user_id: match.user_id,
           type: 'match',
           title: 'Potential Match Found',
-          message: `We found a potential match for your ${itemName}!`,
+          message: `Someone lost an item that matches your found ${match.item_name}!`,
           related_items: {
             lost_item_id: lostItem[0].id,
             found_item_id: match.id
@@ -551,7 +551,7 @@ const LostItemPage: React.FC = () => {
           created_at: new Date().toISOString()
         }));
 
-        // Insert notifications one by one to handle RLS
+        // Insert notifications
         for (const notification of notifications) {
           const { error: notificationError } = await supabase
             .from('notifications')
@@ -559,9 +559,21 @@ const LostItemPage: React.FC = () => {
 
           if (notificationError) {
             console.error('Error creating notification:', notificationError);
-            // Continue with other notifications even if one fails
           }
         }
+
+        // Show alert about matches
+        Alert.alert(
+          'Potential Match Found!',
+          'We found some items that match your lost item. Check your notifications.',
+          [
+            { 
+              text: 'View Notifications', 
+              onPress: () => router.push('/(screens)/notification')
+            },
+            { text: 'Later', style: 'cancel' }
+          ]
+        );
       }
 
       Alert.alert(

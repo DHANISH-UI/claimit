@@ -1,4 +1,4 @@
-import { Stack, useRouter } from "expo-router";
+import { Stack, useRouter } from 'expo-router';
 import { Linking } from 'react-native';
 import { useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
@@ -68,36 +68,6 @@ export default function RootLayout() {
     <Stack>
       <Stack.Screen name="index" options={{ headerShown: false }} />
       <Stack.Screen name="(screens)" options={{ headerShown: false }} />
-      <Stack.Screen
-        name="working"
-        options={{
-          title: 'How It Works',
-          headerStyle: {
-            backgroundColor: '#2c3e50',
-          },
-          headerTintColor: '#fff',
-        }}
-      />
-      <Stack.Screen
-        name="notification"
-        options={{
-          title: 'Notifications',
-          headerStyle: {
-            backgroundColor: '#2c3e50',
-          },
-          headerTintColor: '#fff',
-        }}
-      />
-      <Stack.Screen
-        name="chat-support"
-        options={{
-          title: 'Chat Support',
-          headerStyle: {
-            backgroundColor: '#2c3e50',
-          },
-          headerTintColor: '#fff',
-        }}
-      />
     </Stack>
   );
 }

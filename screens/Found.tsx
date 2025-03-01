@@ -48,11 +48,11 @@ type Coordinate = {
   longitude: number;
 };
 
-type ImageInfo = {
-  uri: string;
-  assets?: Array<{ uri: string }>;
-  canceled?: boolean;
-};
+// type ImageInfo = {
+//   uri: string;
+//   assets?: Array<{ uri: string }>;
+//   canceled?: boolean;
+// };
 
 type FoundItem = {
   id: string;
@@ -63,7 +63,7 @@ type FoundItem = {
   description: string;
   date_found: string;
   contact_details: string;
-  photos: string[];
+  // photos: string[];
   location: {
     latitude: number;
     longitude: number;
@@ -159,7 +159,7 @@ const LocationModal: React.FC<LocationModalProps> = ({
 );
 
 const FoundItemPage: React.FC = () => {
-  const navigation = useNavigation<FoundScreenNavigationProp>();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const router = useRouter();
   const [itemName, setItemName] = useState('');
   const [category, setCategory] = useState('');
@@ -309,29 +309,6 @@ const FoundItemPage: React.FC = () => {
     }
   };
 
-  const pickFromLibrary = async () => {
-    try {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [4, 3],
-        quality: 0.8,
-      });
-
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        const selectedAsset = result.assets[0];
-        const uri = ensureFileUri(selectedAsset.uri); // Ensure the URI starts with 'file://'
-        console.log('Selected image URI:', uri);
-
-        // Add the URI to the photos state
-        setPhotos([...photos, uri]);
-      }
-    } catch (error) {
-      console.error('Photo library error:', error);
-      Alert.alert('Error', 'Failed to select photo from library. Please try again.');
-    }
-  };
-
   const takePhoto = async () => {
     try {
       const result = await ImagePicker.launchCameraAsync({
@@ -343,15 +320,32 @@ const FoundItemPage: React.FC = () => {
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const selectedAsset = result.assets[0];
-        const uri = ensureFileUri(selectedAsset.uri); // Ensure the URI starts with 'file://'
-        console.log('Camera photo URI:', uri);
-
-        // Add the URI to the photos state
+        const uri = ensureFileUri(selectedAsset.uri);
         setPhotos([...photos, uri]);
       }
     } catch (error) {
       console.error('Camera error:', error);
       Alert.alert('Error', 'Failed to take photo. Please try again.');
+    }
+  };
+
+  const pickFromLibrary = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const selectedAsset = result.assets[0];
+        const uri = ensureFileUri(selectedAsset.uri);
+        setPhotos([...photos, uri]);
+      }
+    } catch (error) {
+      console.error('Photo library error:', error);
+      Alert.alert('Error', 'Failed to select photo from library. Please try again.');
     }
   };
 
@@ -458,59 +452,32 @@ const FoundItemPage: React.FC = () => {
   }, []);
 
   const handleSubmit = async () => {
-    console.log('Starting form submission process...');
-
-    // Validate all required fields (excluding photos)
-    if (!itemName || !category || !description || !date || !contactDetails || !selectedLocation) {
-      Alert.alert('Error', 'Please fill all fields and select a location.');
-      return;
-    }
-
     try {
-      setLoading(true);
-
-      // Check authentication
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      if (sessionError || !session) {
-        throw new Error('Authentication required. Please sign in.');
+      console.log('Starting form submission process...');
+      
+      // Validate form data
+      if (!itemName || !category || !description || !date || !contactDetails || !selectedLocation) {
+        Alert.alert('Error', 'Please fill in all required fields');
+        return;
       }
 
-      // Prepare and send data to Supabase (excluding photos)
-      const foundItemData = {
-        user_id: session.user.id,
-        item_name: itemName.trim(),
-        category: category.trim(),
-        description: description.trim(),
-        date_found: new Date(date).toISOString().split('T')[0],
-        contact_details: contactDetails.trim(),
-        location: {
-          latitude: selectedLocation.latitude,
-          longitude: selectedLocation.longitude,
-        },
-        status: 'active',
-      };
-
-      // First save the found item
-      const { data: foundItem, error: foundError } = await supabase
-        .from('found')
-        .insert([foundItemData])
-        .select();
-
-      if (foundError) throw foundError;
-
-      // Check for potential matches in the lost items
+      // Check for matches in lost items
       const { data: lostItems, error: lostError } = await supabase
         .from('lost')
         .select('*')
         .eq('status', 'active');
 
-      if (lostError) throw lostError;
+      if (lostError) {
+        console.error('Error fetching lost items:', lostError);
+        throw lostError;
+      }
 
-      // Check each lost item for a potential match
-      const matches = lostItems.filter(lostItem => {
+      console.log('Found potential matches:', lostItems?.length);
+
+      // Filter matches
+      const matches = lostItems?.filter(lostItem => {
         const nameMatch = lostItem.item_name.toLowerCase().includes(itemName.toLowerCase()) ||
-                         itemName.toLowerCase().includes(lostItem.item_name.toLowerCase());
-        
+                       itemName.toLowerCase().includes(lostItem.item_name.toLowerCase());
         const categoryMatch = lostItem.category === category;
         
         const distance = calculateDistance(
@@ -524,7 +491,31 @@ const FoundItemPage: React.FC = () => {
         return (nameMatch && categoryMatch) || (nameMatch && locationMatch);
       });
 
-      if (matches.length > 0) {
+      console.log('Filtered matches:', matches?.length);
+
+      // Create the found item first
+      const { data: foundItem, error: foundError } = await supabase
+        .from('found')
+        .insert([{
+          user_id: (await supabase.auth.getUser()).data.user?.id,
+          item_name: itemName,
+          category,
+          description,
+          date_found: date,
+          contact_details: contactDetails,
+          location: selectedLocation,
+          status: 'active'
+        }])
+        .select();
+
+      if (foundError) {
+        console.error('Error creating found item:', foundError);
+        throw foundError;
+      }
+
+      if (matches && matches.length > 0) {
+        console.log('Creating notifications for matches...');
+        
         // Create notifications for matches
         const notifications = matches.map(match => ({
           user_id: match.user_id,
@@ -539,7 +530,7 @@ const FoundItemPage: React.FC = () => {
           created_at: new Date().toISOString()
         }));
 
-        // Insert notifications one by one to handle RLS
+        // Insert notifications
         for (const notification of notifications) {
           const { error: notificationError } = await supabase
             .from('notifications')
@@ -547,24 +538,38 @@ const FoundItemPage: React.FC = () => {
 
           if (notificationError) {
             console.error('Error creating notification:', notificationError);
-            // Continue with other notifications even if one fails
           }
         }
+
+        // Show alert about matches
+        console.log('Showing match alert...');
+        Alert.alert(
+          'Potential Match Found!',
+          'We found some items that match your report. Check your notifications.',
+          [
+            { 
+              text: 'View Notifications', 
+              onPress: () => router.push('/(screens)/notification')
+            },
+            { text: 'Later', style: 'cancel' }
+          ]
+        );
       }
 
+      // Show success alert
       Alert.alert('Success', 'Found item report created!', [
         { text: 'OK', onPress: () => navigation.goBack() }
       ]);
 
-      // Reset the form (including photos)
+      // Reset form
       setItemName('');
       setCategory('');
       setDescription('');
       setDate('');
       setContactDetails('');
-      setPhotos([]); // Clear photos from state
       setSelectedLocation(null);
       setLocation(null);
+      setPhotos([]);
 
     } catch (error: unknown) {
       console.error('Submission error:', error);
@@ -649,7 +654,7 @@ const FoundItemPage: React.FC = () => {
             placeholderTextColor="#666" 
           />
         </View>
-
+        
         <View style={styles.sectionContainer}>
           <Text style={styles.sectionTitle}>Photos</Text>
           <TouchableOpacity style={styles.uploadButton} onPress={handlePhotoUpload}>

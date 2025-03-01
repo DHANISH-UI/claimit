@@ -10,7 +10,9 @@ import {
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter, useNavigation } from 'expo-router';
+import { useNavigation, useRouter } from 'expo-router';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { RootStackParamList } from '../App';
 import { supabase } from '../lib/supabase';
 
 // Update the Notification type
@@ -28,9 +30,19 @@ type Notification = {
   created_at: string;
 };
 
+// Add this type at the top
+type ChatRoom = {
+  id: string;
+  lost_user_id: string;
+  found_user_id: string;
+  lost_item_id: string;
+  found_item_id: string;
+  created_at: string;
+};
+
 const NotificationPage: React.FC = () => {
   const router = useRouter();
-  const navigation = useNavigation();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -77,6 +89,38 @@ const NotificationPage: React.FC = () => {
     }
   };
 
+  const handleChatNow = async (notification: Notification) => {
+    try {
+      // Check session
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        Alert.alert('Error', 'Please sign in to chat');
+        return;
+      }
+
+      // Check/create chat room
+      const { data: existingRoom } = await supabase
+        .from('chat_rooms')
+        .select('*')
+        .or(`lost_item_id.eq.${notification.related_items.lost_item_id},found_item_id.eq.${notification.related_items.found_item_id}`)
+        .single();
+
+      const roomId = existingRoom?.id || 
+        (await supabase.from('chat_rooms').insert({
+          lost_user_id: notification.user_id,
+          found_user_id: session.user.id,
+          lost_item_id: notification.related_items.lost_item_id,
+          found_item_id: notification.related_items.found_item_id
+        }).select().single()).data?.id;
+
+      // Navigate to chat
+      router.push(`/(screens)/chat?roomId=${roomId}`);
+    } catch (error) {
+      console.error('Chat error:', error);
+      Alert.alert('Error', 'Failed to start chat');
+    }
+  };
+
   const renderNotification = (notification: Notification) => (
     <TouchableOpacity 
       key={notification.id}
@@ -91,32 +135,33 @@ const NotificationPage: React.FC = () => {
       <View style={styles.notificationContent}>
         <View style={styles.notificationHeader}>
           <Text style={styles.notificationTitle}>{notification.title}</Text>
-          <View style={styles.headerActions}>
-            <Text style={styles.notificationTime}>
-              {formatTimestamp(notification.created_at)}
-            </Text>
-            <TouchableOpacity 
-              onPress={() => {
-                Alert.alert(
-                  'Delete Notification',
-                  'Are you sure you want to delete this notification?',
-                  [
-                    { text: 'Cancel', style: 'cancel' },
-                    { 
-                      text: 'Delete', 
-                      onPress: () => handleDeleteNotification(notification.id),
-                      style: 'destructive'
-                    }
-                  ]
-                );
-              }}
-              style={styles.deleteButton}
-            >
-              <MaterialIcons name="delete-outline" size={20} color="#ff6b6b" />
-            </TouchableOpacity>
-          </View>
+          <Text style={styles.notificationTime}>
+            {formatTimestamp(notification.created_at)}
+          </Text>
         </View>
-        <Text style={styles.notificationMessage}>{notification.message}</Text>
+        <View style={styles.messageContainer}>
+          <Text style={styles.notificationMessage}>{notification.message}</Text>
+          <TouchableOpacity 
+            onPress={() => handleDeleteNotification(notification.id)}
+            style={styles.deleteButton}
+          >
+            <MaterialIcons name="delete-outline" size={20} color="#ff6b6b" />
+          </TouchableOpacity>
+        </View>
+        {notification.type === 'match' && (
+          <TouchableOpacity 
+            style={styles.chatButton}
+            onPress={() => handleChatNow(notification)}
+          >
+            <LinearGradient
+              colors={['#4ecdc4', '#45b7af']}
+              style={styles.chatButtonGradient}
+            >
+              <MaterialIcons name="chat" size={20} color="#fff" />
+              <Text style={styles.chatButtonText}>Chat with Finder</Text>
+            </LinearGradient>
+          </TouchableOpacity>
+        )}
       </View>
       {!notification.read && <View style={styles.unreadDot} />}
     </TouchableOpacity>
@@ -175,7 +220,7 @@ const NotificationPage: React.FC = () => {
         >
           <TouchableOpacity 
             style={styles.backButton}
-            onPress={() => router.back()}
+            onPress={() => navigation.goBack()}
           >
             <MaterialIcons name="arrow-back" size={24} color="#fff" />
           </TouchableOpacity>
@@ -237,7 +282,7 @@ const styles = StyleSheet.create({
     borderRadius: 15,
     padding: 15,
     marginBottom: 15,
-    alignItems: 'center',
+    alignItems: 'flex-start',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -259,27 +304,33 @@ const styles = StyleSheet.create({
   },
   notificationContent: {
     flex: 1,
+    marginRight: 8,
   },
   notificationHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 5,
+    marginBottom: 8,
   },
   notificationTitle: {
     fontSize: 16,
     fontWeight: '600',
     color: '#2c3e50',
-    flex: 1,
+    marginBottom: 4,
   },
   notificationTime: {
     fontSize: 12,
     color: '#94a3b8',
   },
+  messageContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
   notificationMessage: {
+    flex: 1,
     fontSize: 14,
     color: '#64748b',
     lineHeight: 20,
+    marginRight: 8,
   },
   unreadDot: {
     width: 8,
@@ -295,13 +346,24 @@ const styles = StyleSheet.create({
     zIndex: 1,
     padding: 8,
   },
-  headerActions: {
+  deleteButton: {
+    padding: 6,
+  },
+  chatButton: {
+    borderRadius: 6,
+    overflow: 'hidden',
+  },
+  chatButtonGradient: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    padding: 6,
+    paddingHorizontal: 12,
+    gap: 6,
   },
-  deleteButton: {
-    padding: 4,
+  chatButtonText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '600',
   },
 });
 
