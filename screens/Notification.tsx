@@ -99,48 +99,40 @@ const NotificationPage: React.FC = () => {
       // Check if chat room exists
       const { data: existingRoom } = await supabase
         .from('chat_rooms')
-        .select('id')
+        .select('*')
         .or(
-          `and(lost_item_id.eq.${notification.related_items.lost_item_id},found_item_id.eq.${notification.related_items.found_item_id}),` +
-          `and(lost_item_id.eq.${notification.related_items.found_item_id},found_item_id.eq.${notification.related_items.lost_item_id})`
+          `and(lost_item_id.eq.${notification.related_items.lost_item_id},found_item_id.eq.${notification.related_items.found_item_id})`
         )
         .single();
 
-      let roomId: string | undefined;
-      
       if (existingRoom) {
-        roomId = existingRoom.id;
-        console.log("Found existing room:", roomId);
-      } else {
-        const isLostItemOwner = notification.message.includes("matches your lost");
-        
-        // Create new chat room with consistent item placement
-        const { data: newRoom, error: createError } = await supabase
-          .from('chat_rooms')
-          .insert({
-            lost_item_id: notification.related_items.lost_item_id,  // Always use consistent order
-            found_item_id: notification.related_items.found_item_id,
-            lost_user_id: isLostItemOwner ? session.user.id : notification.user_id,
-            found_user_id: isLostItemOwner ? notification.user_id : session.user.id
-          })
-          .select('id')
-          .single();
-
-        if (createError) throw createError;
-        if (!newRoom) throw new Error('Failed to create chat room');
-        
-        roomId = newRoom.id;
-      }
-
-      if (roomId) {
-        console.log("Navigating to chat with roomId:", roomId);
+        // Use composite key for room identification
+        const roomId = `${existingRoom.lost_item_id}_${existingRoom.found_item_id}`;
         router.push({
           pathname: "/chat/[id]",
           params: { id: roomId }
         });
       } else {
-        console.error("No roomId available for chat");
-        Alert.alert('Error', 'Chat room not available');
+        // Create new chat room using item IDs as identifiers
+        const { data: newRoom, error: createError } = await supabase
+          .from('chat_rooms')
+          .upsert({
+            lost_item_id: notification.related_items.lost_item_id,
+            found_item_id: notification.related_items.found_item_id,
+            lost_user_id: notification.user_id,
+            found_user_id: session.user.id
+          })
+          .select()
+          .single();
+
+        if (createError) throw createError;
+        if (!newRoom) throw new Error('Failed to create chat room');
+        
+        const roomId = `${newRoom.lost_item_id}_${newRoom.found_item_id}`;
+        router.push({
+          pathname: "/chat/[id]",
+          params: { id: roomId }
+        });
       }
 
     } catch (error) {

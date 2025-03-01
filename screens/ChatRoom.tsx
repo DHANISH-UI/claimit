@@ -21,9 +21,9 @@ type Message = {
   created_at: string;
 };
 
-// Add props type
+// Update the props type
 type ChatRoomProps = {
-  roomId: string;
+  roomId: string;  // This will now be "lost_item_id_found_item_id"
 };
 
 const ChatRoom: React.FC<ChatRoomProps> = ({ roomId }) => {
@@ -33,6 +33,9 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ roomId }) => {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const flatListRef = useRef<FlatList>(null);
   const inputRef = useRef<TextInput>(null);
+
+  // Split the composite ID
+  const [lostItemId, foundItemId] = roomId.split('_');
 
   useEffect(() => {
     // Get current user
@@ -52,19 +55,24 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ roomId }) => {
 
   const fetchMessages = async () => {
     try {
-      console.log('Fetching messages for room:', roomId);
-      // Add ordering to ensure messages appear in correct sequence
+      // Get the actual chat room first
+      const { data: room } = await supabase
+        .from('chat_rooms')
+        .select('id')
+        .eq('lost_item_id', lostItemId)
+        .eq('found_item_id', foundItemId)
+        .single();
+
+      if (!room) throw new Error('Chat room not found');
+
+      // Then get messages using the room's ID
       const { data, error } = await supabase
         .from('messages')
         .select('*')
-        .eq('chat_room_id', roomId)
+        .eq('chat_room_id', room.id)
         .order('created_at', { ascending: true });
 
-      if (error) {
-        console.error('Fetch error:', error);
-        throw error;
-      }
-      console.log('Messages found:', data?.length);
+      if (error) throw error;
       setMessages(data || []);
     } catch (error) {
       console.error('Error fetching messages:', error);
@@ -72,35 +80,27 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ roomId }) => {
   };
 
   const sendMessage = async () => {
-    if (!newMessage.trim() || !currentUserId || !roomId) {
-      console.log('Send validation failed:', { newMessage, currentUserId, roomId });
-      return;
-    }
+    if (!newMessage.trim() || !currentUserId) return;
 
     try {
-      console.log('Attempting to send message:', {
-        chat_room_id: roomId,
-        sender_id: currentUserId,
-        content: newMessage.trim()
-      });
-
-      const { data, error } = await supabase
-        .from('messages')
-        .insert({
-          chat_room_id: roomId,
-          content: newMessage.trim(),
-          sender_id: currentUserId,
-          created_at: new Date().toISOString()
-        })
-        .select()
+      // Get room ID first
+      const { data: room } = await supabase
+        .from('chat_rooms')
+        .select('id')
+        .eq('lost_item_id', lostItemId)
+        .eq('found_item_id', foundItemId)
         .single();
 
-      if (error) {
-        console.error('Send error:', error);
-        throw error;
-      }
+      if (!room) throw new Error('Chat room not found');
 
-      console.log('Message sent successfully:', data);
+      // Then send message
+      const { error } = await supabase.from('messages').insert({
+        chat_room_id: room.id,
+        content: newMessage.trim(),
+        sender_id: currentUserId
+      });
+
+      if (error) throw error;
       setNewMessage('');
       inputRef.current?.clear();
     } catch (error) {
