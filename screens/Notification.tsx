@@ -98,20 +98,35 @@ const NotificationPage: React.FC = () => {
         return;
       }
 
-      // Check/create chat room
+      // Check if chat room already exists with these item IDs in either order
       const { data: existingRoom } = await supabase
         .from('chat_rooms')
         .select('*')
-        .or(`lost_item_id.eq.${notification.related_items.lost_item_id},found_item_id.eq.${notification.related_items.found_item_id}`)
+        .or(
+          `and(lost_item_id.eq.${notification.related_items.lost_item_id},found_item_id.eq.${notification.related_items.found_item_id}),
+           and(lost_item_id.eq.${notification.related_items.found_item_id},found_item_id.eq.${notification.related_items.lost_item_id})`
+        )
         .single();
 
-      const roomId = existingRoom?.id || 
-        (await supabase.from('chat_rooms').insert({
-          lost_user_id: notification.user_id,
-          found_user_id: session.user.id,
-          lost_item_id: notification.related_items.lost_item_id,
-          found_item_id: notification.related_items.found_item_id
-        }).select().single()).data?.id;
+      let roomId;
+      if (existingRoom) {
+        roomId = existingRoom.id;
+      } else {
+        // Create new chat room with consistent item ID placement
+        const isLostItemOwner = notification.message.includes("matches your lost");
+        const { data: newRoom } = await supabase
+          .from('chat_rooms')
+          .insert({
+            lost_item_id: isLostItemOwner ? notification.related_items.lost_item_id : notification.related_items.found_item_id,
+            found_item_id: isLostItemOwner ? notification.related_items.found_item_id : notification.related_items.lost_item_id,
+            lost_user_id: isLostItemOwner ? session.user.id : notification.user_id,
+            found_user_id: isLostItemOwner ? notification.user_id : session.user.id
+          })
+          .select()
+          .single();
+
+        roomId = newRoom?.id;
+      }
 
       // Navigate to chat
       router.push(`/(screens)/chat?roomId=${roomId}`);
