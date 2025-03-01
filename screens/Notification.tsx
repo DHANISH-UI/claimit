@@ -96,31 +96,29 @@ const NotificationPage: React.FC = () => {
         return;
       }
 
+      const isLostItemOwner = notification.message.includes("matches your lost");
+
       // Check if chat room exists
       const { data: existingRoom } = await supabase
         .from('chat_rooms')
-        .select('*')
-        .or(
-          `and(lost_item_id.eq.${notification.related_items.lost_item_id},found_item_id.eq.${notification.related_items.found_item_id})`
-        )
+        .select('id')
+        .eq('lost_item_id', notification.related_items.lost_item_id)
+        .eq('found_item_id', notification.related_items.found_item_id)
         .single();
 
+      let roomId: string;
+
       if (existingRoom) {
-        // Use composite key for room identification
-        const roomId = `${existingRoom.lost_item_id}_${existingRoom.found_item_id}`;
-        router.push({
-          pathname: "/chat/[id]",
-          params: { id: roomId }
-        });
+        roomId = existingRoom.id;
       } else {
-        // Create new chat room using item IDs as identifiers
+        // Create new chat room
         const { data: newRoom, error: createError } = await supabase
           .from('chat_rooms')
-          .upsert({
+          .insert({
             lost_item_id: notification.related_items.lost_item_id,
             found_item_id: notification.related_items.found_item_id,
-            lost_user_id: notification.user_id,
-            found_user_id: session.user.id
+            lost_user_id: isLostItemOwner ? session.user.id : notification.user_id,
+            found_user_id: isLostItemOwner ? notification.user_id : session.user.id
           })
           .select()
           .single();
@@ -128,12 +126,13 @@ const NotificationPage: React.FC = () => {
         if (createError) throw createError;
         if (!newRoom) throw new Error('Failed to create chat room');
         
-        const roomId = `${newRoom.lost_item_id}_${newRoom.found_item_id}`;
-        router.push({
-          pathname: "/chat/[id]",
-          params: { id: roomId }
-        });
+        roomId = newRoom.id;
       }
+
+      router.push({
+        pathname: "/chat/[id]",
+        params: { id: roomId }
+      });
 
     } catch (error) {
       console.error('Chat error:', error);

@@ -34,9 +34,6 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ roomId }) => {
   const flatListRef = useRef<FlatList>(null);
   const inputRef = useRef<TextInput>(null);
 
-  // Split the composite ID
-  const [lostItemId, foundItemId] = roomId.split('_');
-
   useEffect(() => {
     // Get current user
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -55,21 +52,10 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ roomId }) => {
 
   const fetchMessages = async () => {
     try {
-      // Get the actual chat room first
-      const { data: room } = await supabase
-        .from('chat_rooms')
-        .select('id')
-        .eq('lost_item_id', lostItemId)
-        .eq('found_item_id', foundItemId)
-        .single();
-
-      if (!room) throw new Error('Chat room not found');
-
-      // Then get messages using the room's ID
       const { data, error } = await supabase
         .from('messages')
         .select('*')
-        .eq('chat_room_id', room.id)
+        .eq('chat_room_id', roomId)
         .order('created_at', { ascending: true });
 
       if (error) throw error;
@@ -83,19 +69,8 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ roomId }) => {
     if (!newMessage.trim() || !currentUserId) return;
 
     try {
-      // Get room ID first
-      const { data: room } = await supabase
-        .from('chat_rooms')
-        .select('id')
-        .eq('lost_item_id', lostItemId)
-        .eq('found_item_id', foundItemId)
-        .single();
-
-      if (!room) throw new Error('Chat room not found');
-
-      // Then send message
       const { error } = await supabase.from('messages').insert({
-        chat_room_id: room.id,
+        chat_room_id: roomId,
         content: newMessage.trim(),
         sender_id: currentUserId
       });
