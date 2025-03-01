@@ -63,7 +63,7 @@ const ProfilePage = () => {
 
         setStats({
           lostItems: lostCount || 0,
-          foundItems: foundCount || 2,
+          foundItems: foundCount || 0,
         });
       }
     } catch (error) {

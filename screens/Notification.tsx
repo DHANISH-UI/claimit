@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useNavigation, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../App';
 import { supabase } from '../lib/supabase';
@@ -42,7 +42,6 @@ type ChatRoom = {
 
 const NotificationPage: React.FC = () => {
   const router = useRouter();
-  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -91,45 +90,50 @@ const NotificationPage: React.FC = () => {
 
   const handleChatNow = async (notification: Notification) => {
     try {
-      // Check session
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         Alert.alert('Error', 'Please sign in to chat');
         return;
       }
 
-      // Check if chat room already exists with these item IDs in either order
+      // Check if chat room exists
       const { data: existingRoom } = await supabase
         .from('chat_rooms')
-        .select('*')
-        .or(
-          `and(lost_item_id.eq.${notification.related_items.lost_item_id},found_item_id.eq.${notification.related_items.found_item_id}),
-           and(lost_item_id.eq.${notification.related_items.found_item_id},found_item_id.eq.${notification.related_items.lost_item_id})`
-        )
+        .select('id')
+        .eq('lost_item_id', notification.related_items.lost_item_id)
+        .eq('found_item_id', notification.related_items.found_item_id)
         .single();
 
-      let roomId;
+      let roomId: string;
+      
       if (existingRoom) {
         roomId = existingRoom.id;
       } else {
-        // Create new chat room with consistent item ID placement
         const isLostItemOwner = notification.message.includes("matches your lost");
-        const { data: newRoom } = await supabase
+        
+        // Create new chat room
+        const { data: newRoom, error: createError } = await supabase
           .from('chat_rooms')
           .insert({
-            lost_item_id: isLostItemOwner ? notification.related_items.lost_item_id : notification.related_items.found_item_id,
-            found_item_id: isLostItemOwner ? notification.related_items.found_item_id : notification.related_items.lost_item_id,
+            lost_item_id: notification.related_items.lost_item_id,
+            found_item_id: notification.related_items.found_item_id,
             lost_user_id: isLostItemOwner ? session.user.id : notification.user_id,
             found_user_id: isLostItemOwner ? notification.user_id : session.user.id
           })
-          .select()
+          .select('id')
           .single();
 
-        roomId = newRoom?.id;
+        if (createError) throw createError;
+        if (!newRoom) throw new Error('Failed to create chat room');
+        
+        roomId = newRoom.id;
       }
 
-      // Navigate to chat
-      router.push(`/(screens)/chat?roomId=${roomId}`);
+      router.push({
+        pathname: "/chat",
+        params: { roomId }
+      });
+
     } catch (error) {
       console.error('Chat error:', error);
       Alert.alert('Error', 'Failed to start chat');
@@ -243,7 +247,7 @@ const NotificationPage: React.FC = () => {
         >
           <TouchableOpacity 
             style={styles.backButton}
-            onPress={() => navigation.goBack()}
+            onPress={() => router.back()}
           >
             <MaterialIcons name="arrow-back" size={24} color="#fff" />
           </TouchableOpacity>

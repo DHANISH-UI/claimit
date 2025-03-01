@@ -20,8 +20,12 @@ type Message = {
   created_at: string;
 };
 
-const ChatRoom: React.FC = () => {
-  const { roomId } = useLocalSearchParams<{ roomId: string }>();
+// Add props type
+type ChatRoomProps = {
+  roomId: string;
+};
+
+const ChatRoom: React.FC<ChatRoomProps> = ({ roomId }) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(true);
@@ -35,63 +39,47 @@ const ChatRoom: React.FC = () => {
       setCurrentUserId(user?.id || null);
     });
 
+    // Add console logs for debugging
+    console.log('Chat room ID:', roomId);
+    
     fetchMessages();
-    const subscription = subscribeToMessages();
+    const cleanup = subscribeToMessages();
     return () => {
-      subscription();
+      cleanup();
     };
   }, [roomId]);
 
   const fetchMessages = async () => {
     try {
       console.log('Fetching messages for room:', roomId);
+      // Add ordering to ensure messages appear in correct sequence
       const { data, error } = await supabase
         .from('messages')
         .select('*')
         .eq('chat_room_id', roomId)
         .order('created_at', { ascending: true });
 
-      if (error) throw error;
-      console.log('Fetched messages:', data?.length);
+      if (error) {
+        console.error('Fetch error:', error);
+        throw error;
+      }
+      console.log('Messages found:', data?.length);
       setMessages(data || []);
     } catch (error) {
       console.error('Error fetching messages:', error);
-    } finally {
-      setLoading(false);
     }
   };
 
-  const subscribeToMessages = () => {
-    const subscription = supabase
-      .channel('messages')
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'messages',
-          filter: `chat_room_id=eq.${roomId}`, // Only filter by chat room, not user
-        },
-        (payload) => {
-          setMessages((current) => [...current, payload.new as Message]);
-          flatListRef.current?.scrollToEnd();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      subscription.unsubscribe();
-    };
-  };
-
   const sendMessage = async () => {
-    if (!newMessage.trim() || !currentUserId) return;
+    if (!newMessage.trim() || !currentUserId || !roomId) return;
 
     try {
+      console.log('Sending message to room:', roomId);
       const { error } = await supabase.from('messages').insert({
         chat_room_id: roomId,
         content: newMessage.trim(),
-        sender_id: currentUserId
+        sender_id: currentUserId,
+        created_at: new Date().toISOString()
       });
 
       if (error) throw error;
@@ -100,6 +88,38 @@ const ChatRoom: React.FC = () => {
     } catch (error) {
       console.error('Error sending message:', error);
     }
+  };
+
+  const subscribeToMessages = () => {
+    console.log('Setting up real-time subscription for room:', roomId);
+    const channel = supabase
+      .channel(`room:${roomId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages',
+          filter: `chat_room_id=eq.${roomId}`,
+        },
+        (payload) => {
+          console.log('New message received:', payload.new);
+          // Ensure we don't duplicate messages
+          setMessages((current) => {
+            const exists = current.some(msg => msg.id === payload.new.id);
+            if (!exists) {
+              return [...current, payload.new as Message];
+            }
+            return current;
+          });
+          flatListRef.current?.scrollToEnd();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      channel.unsubscribe();
+    };
   };
 
   const isOwnMessage = (senderId: string) => currentUserId === senderId;
