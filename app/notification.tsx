@@ -97,24 +97,25 @@ const NotificationPage: React.FC = () => {
       }
 
       const isLostItemOwner = notification.message.includes("matches your lost");
-
-      // Check if chat room exists
-      const { data: existingRoom } = await supabase
+      
+      // Check for existing room in both orders
+      const { data: existingRooms } = await supabase
         .from('chat_rooms')
         .select('id')
-        .eq('lost_item_id', notification.related_items.lost_item_id)
-        .eq('found_item_id', notification.related_items.found_item_id)
-        .single();
+        .or(`lost_item_id.eq.${notification.related_items.lost_item_id},lost_item_id.eq.${notification.related_items.found_item_id}`)
+        .or(`found_item_id.eq.${notification.related_items.found_item_id},found_item_id.eq.${notification.related_items.lost_item_id}`)
+        .limit(1);
 
       let roomId: string;
 
-      if (existingRoom) {
-        roomId = existingRoom.id;
+      if (existingRooms && existingRooms.length > 0) {
+        console.log('Found existing room:', existingRooms[0].id);
+        roomId = existingRooms[0].id;
       } else {
-        // Create new chat room
+        // Create new chat room with consistent item order
         const { data: newRoom, error: createError } = await supabase
           .from('chat_rooms')
-          .insert({
+          .insert({  // Changed back to insert since we verified no room exists
             lost_item_id: notification.related_items.lost_item_id,
             found_item_id: notification.related_items.found_item_id,
             lost_user_id: isLostItemOwner ? session.user.id : notification.user_id,
@@ -123,9 +124,16 @@ const NotificationPage: React.FC = () => {
           .select()
           .single();
 
-        if (createError) throw createError;
-        if (!newRoom) throw new Error('Failed to create chat room');
+        if (createError) {
+          console.error('Create room error:', createError);
+          throw createError;
+        }
         
+        if (!newRoom) {
+          throw new Error('Failed to create chat room');
+        }
+        
+        console.log('Created new room:', newRoom.id);
         roomId = newRoom.id;
       }
 

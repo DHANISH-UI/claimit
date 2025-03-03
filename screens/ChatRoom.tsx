@@ -98,21 +98,24 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ roomId }) => {
         },
         (payload) => {
           console.log('New message received:', payload.new);
-          // Ensure we don't duplicate messages
-          setMessages((current) => {
-            const exists = current.some(msg => msg.id === payload.new.id);
-            if (!exists) {
-              return [...current, payload.new as Message];
+          // Use a function to update state to avoid race conditions
+          setMessages((currentMessages) => {
+            // Ensure we don't duplicate messages
+            if (!currentMessages.some(msg => msg.id === payload.new.id)) {
+              return [...currentMessages, payload.new as Message];
             }
-            return current;
+            return currentMessages;
           });
-          flatListRef.current?.scrollToEnd();
+          // Scroll to bottom after a slight delay to ensure render completes
+          setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log(`Subscription status for room ${roomId}:`, status);
+      });
 
     return () => {
-      channel.unsubscribe();
+      supabase.removeChannel(channel);
     };
   };
 
