@@ -18,7 +18,7 @@ import { supabase } from '../lib/supabase';
 import { useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
-import { decode as atob } from 'base-64';
+import { decode } from 'base-64';
 import ImageView from 'react-native-image-viewing';
 
 type MessageType = 'text' | 'image';
@@ -40,6 +40,14 @@ type Message = {
 type ChatRoomProps = {
   roomId: string;  // This will now be "lost_item_id_found_item_id"
 };
+
+// Instead of extending FileSystem.FileInfo, create a new interface
+interface FileInfoWithSize {
+  exists: boolean;
+  uri: string;
+  size?: number;
+  isDirectory: boolean;
+}
 
 const ChatRoom: React.FC<ChatRoomProps> = ({ roomId }) => {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -79,16 +87,31 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ roomId }) => {
 
   const fetchMessages = async () => {
     try {
+      setLoading(true);  // Add loading state
+      
+      // Clear existing messages first
+      setMessages([]);
+
       const { data, error } = await supabase
         .from('messages')
         .select('*')
         .eq('chat_room_id', roomId)
-        .order('created_at', { ascending: true });
+        .order('created_at', { ascending: true })
+        .throwOnError();  // This will throw if there's an error
 
       if (error) throw error;
+
+      // Add console log to debug
+      console.log('Fetched messages:', data);
+
+      // Update messages state with fresh data
       setMessages(data || []);
+
     } catch (error) {
       console.error('Error fetching messages:', error);
+      Alert.alert('Error', 'Failed to load messages');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -125,21 +148,30 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ roomId }) => {
         },
         (payload) => {
           console.log('New message received:', payload.new);
-          // Use a function to update state to avoid race conditions
           setMessages((currentMessages) => {
-            // Ensure we don't duplicate messages
             if (!currentMessages.some(msg => msg.id === payload.new.id)) {
               return [...currentMessages, payload.new as Message];
             }
             return currentMessages;
           });
-          // Scroll to bottom after a slight delay to ensure render completes
-          setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
         }
       )
-      .subscribe((status) => {
-        console.log(`Subscription status for room ${roomId}:`, status);
-      });
+      .on(
+        'postgres_changes',
+        {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'messages',
+          filter: `chat_room_id=eq.${roomId}`,
+        },
+        (payload) => {
+          console.log('Message deleted:', payload.old);
+          setMessages((currentMessages) => 
+            currentMessages.filter(msg => msg.id !== payload.old.id)
+          );
+        }
+      )
+      .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
@@ -176,10 +208,22 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ roomId }) => {
         throw uploadError;
       }
 
-      // Get public URL
+      // Get public URL - Add this logging
       const { data: { publicUrl } } = supabase.storage
         .from('chat-images')
         .getPublicUrl(fileName);
+
+      console.log('Image public URL:', publicUrl); // Add this log
+
+      // Verify the URL is accessible
+      try {
+        const response = await fetch(publicUrl);
+        if (!response.ok) {
+          throw new Error('Image URL not accessible');
+        }
+      } catch (error) {
+        console.error('Image access error:', error);
+      }
 
       // Create message with image URL
       const { error: messageError } = await supabase.from('messages').insert({
@@ -225,7 +269,7 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ roomId }) => {
 
       if (!result.canceled && result.assets[0]) {
         // Check file size
-        const fileInfo = await FileSystem.getInfoAsync(result.assets[0].uri);
+        const fileInfo = await FileSystem.getInfoAsync(result.assets[0].uri) as FileInfoWithSize;
         const fileSize = fileInfo.size || 0;
         const maxSize = 5 * 1024 * 1024; // 5MB
 
@@ -273,17 +317,59 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ roomId }) => {
     );
   };
 
-  // Then update the message rendering to use this component
+  // Add this function to handle message deletion
+  const handleDeleteMessage = async (messageId: string, senderId: string) => {
+    // Only allow users to delete their own messages
+    if (senderId !== currentUserId) return;
+
+    try {
+      const { error } = await supabase
+        .from('messages')
+        .delete()
+        .eq('id', messageId);
+
+      if (error) throw error;
+
+      // Update local state
+      setMessages(prevMessages => 
+        prevMessages.filter(message => message.id !== messageId)
+      );
+    } catch (error) {
+      console.error('Error deleting message:', error);
+      Alert.alert('Error', 'Failed to delete message');
+    }
+  };
+
+  // Modify the renderMessage function to include delete option
   const renderMessage = ({ item }: { item: Message }) => {
     const isOwn = isOwnMessage(item.sender_id);
     const screenWidth = Dimensions.get('window').width;
     const maxImageWidth = screenWidth * 0.6;
 
     return (
-      <View style={[
-        styles.messageContainer,
-        isOwn ? styles.ownMessage : styles.otherMessage
-      ]}>
+      <TouchableOpacity
+        style={[
+          styles.messageContainer,
+          isOwn ? styles.ownMessage : styles.otherMessage,
+          styles.pressable
+        ]}
+        onLongPress={() => {
+          if (isOwn) {
+            Alert.alert(
+              'Delete Message',
+              'Do you want to delete this message?',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                { 
+                  text: 'Delete', 
+                  onPress: () => handleDeleteMessage(item.id, item.sender_id),
+                  style: 'destructive'
+                }
+              ]
+            );
+          }
+        }}
+      >
         {item.type === 'image' ? (
           <View>
             <ImageWithLoading
@@ -309,12 +395,17 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ roomId }) => {
             {item.content}
           </Text>
         )}
-      </View>
+      </TouchableOpacity>
     );
   };
 
   return (
     <View style={styles.container}>
+      {loading && (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#4ecdc4" />
+        </View>
+      )}
       <FlatList
         ref={flatListRef}
         data={messages}
@@ -522,6 +613,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#f0f0f0',
     borderRadius: 10,
+  },
+  pressable: {
+    opacity: 1,
+  },
+  loadingContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    zIndex: 1,
   },
 });
 
