@@ -9,16 +9,31 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
+  Image,
+  ActivityIndicator,
+  Dimensions,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { supabase } from '../lib/supabase';
 import { useLocalSearchParams } from 'expo-router';
+import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system';
+import { decode as atob } from 'base-64';
+import ImageView from 'react-native-image-viewing';
+
+type MessageType = 'text' | 'image';
 
 type Message = {
   id: string;
   content: string;
   sender_id: string;
   created_at: string;
+  type: MessageType;
+  metadata?: {
+    width?: number;
+    height?: number;
+    fileSize?: number;
+  };
 };
 
 // Update the props type
@@ -33,6 +48,9 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ roomId }) => {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const flatListRef = useRef<FlatList>(null);
   const inputRef = useRef<TextInput>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [imageViewerVisible, setImageViewerVisible] = useState(false);
+  const [selectedImageUrl, setSelectedImageUrl] = useState<string | null>(null);
 
   useEffect(() => {
     // Get current user
@@ -49,6 +67,15 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ roomId }) => {
       cleanup();
     };
   }, [roomId]);
+
+  useEffect(() => {
+    (async () => {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Sorry, we need camera roll permissions to share images!');
+      }
+    })();
+  }, []);
 
   const fetchMessages = async () => {
     try {
@@ -121,30 +148,206 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ roomId }) => {
 
   const isOwnMessage = (senderId: string) => currentUserId === senderId;
 
+  const uploadAndSendImage = async (imageAsset: ImagePicker.ImagePickerAsset) => {
+    if (!currentUserId) return;
+    
+    try {
+      setIsUploading(true);
+
+      // First, read the file as base64
+      const base64 = await FileSystem.readAsStringAsync(imageAsset.uri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+
+      // Generate a unique filename
+      const fileExt = imageAsset.uri.split('.').pop() || 'jpg';
+      const fileName = `${roomId}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+
+      // Upload directly using base64
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('chat-images')
+        .upload(fileName, decode(base64), {
+          contentType: `image/${fileExt}`,
+          upsert: false
+        });
+
+      if (uploadError) {
+        console.error('Upload error:', uploadError);
+        throw uploadError;
+      }
+
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('chat-images')
+        .getPublicUrl(fileName);
+
+      // Create message with image URL
+      const { error: messageError } = await supabase.from('messages').insert({
+        chat_room_id: roomId,
+        sender_id: currentUserId,
+        content: publicUrl,
+        type: 'image',
+        metadata: {
+          width: imageAsset.width,
+          height: imageAsset.height,
+        }
+      });
+
+      if (messageError) {
+        console.error('Message error:', messageError);
+        throw messageError;
+      }
+
+    } catch (error) {
+      console.error('Error uploading image:', error);
+      Alert.alert('Error', 'Failed to send image. Please try again.');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleImagePick = async () => {
+    try {
+      // Request permissions first
+      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      
+      if (permissionResult.granted === false) {
+        Alert.alert('Permission Required', 'Please allow access to your photo library to send images.');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 0.7, // Reduced quality for better performance
+        allowsEditing: true,
+        aspect: [4, 3],
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        // Check file size
+        const fileInfo = await FileSystem.getInfoAsync(result.assets[0].uri);
+        const fileSize = fileInfo.size || 0;
+        const maxSize = 5 * 1024 * 1024; // 5MB
+
+        if (fileSize > maxSize) {
+          Alert.alert('File Too Large', 'Please select an image smaller than 5MB');
+          return;
+        }
+
+        await uploadAndSendImage(result.assets[0]);
+      }
+    } catch (error) {
+      console.error('Error picking image:', error);
+      Alert.alert('Error', 'Failed to select image');
+    }
+  };
+
+  const handleImagePress = (imageUrl: string) => {
+    setSelectedImageUrl(imageUrl);
+    setImageViewerVisible(true);
+  };
+
+  // Add this component for image loading
+  const ImageWithLoading: React.FC<{
+    uri: string;
+    style: any;
+    onPress: () => void;
+  }> = ({ uri, style, onPress }) => {
+    const [loading, setLoading] = useState(true);
+
+    return (
+      <TouchableOpacity onPress={onPress} activeOpacity={0.9}>
+        <Image
+          source={{ uri }}
+          style={style}
+          resizeMode="cover"
+          onLoadStart={() => setLoading(true)}
+          onLoadEnd={() => setLoading(false)}
+        />
+        {loading && (
+          <View style={[style, styles.imageLoadingContainer]}>
+            <ActivityIndicator size="small" color="#4ecdc4" />
+          </View>
+        )}
+      </TouchableOpacity>
+    );
+  };
+
+  // Then update the message rendering to use this component
+  const renderMessage = ({ item }: { item: Message }) => {
+    const isOwn = isOwnMessage(item.sender_id);
+    const screenWidth = Dimensions.get('window').width;
+    const maxImageWidth = screenWidth * 0.6;
+
+    return (
+      <View style={[
+        styles.messageContainer,
+        isOwn ? styles.ownMessage : styles.otherMessage
+      ]}>
+        {item.type === 'image' ? (
+          <View>
+            <ImageWithLoading
+              uri={item.content}
+              style={[
+                styles.messageImage,
+                { maxWidth: maxImageWidth }
+              ]}
+              onPress={() => handleImagePress(item.content)}
+            />
+            <Text style={styles.messageTime}>
+              {new Date(item.created_at).toLocaleTimeString([], { 
+                hour: '2-digit', 
+                minute: '2-digit' 
+              })}
+            </Text>
+          </View>
+        ) : (
+          <Text style={[
+            styles.messageText,
+            isOwn ? styles.ownMessageText : styles.otherMessageText
+          ]}>
+            {item.content}
+          </Text>
+        )}
+      </View>
+    );
+  };
+
   return (
     <View style={styles.container}>
       <FlatList
         ref={flatListRef}
         data={messages}
         keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <View style={[
-            styles.messageContainer,
-            isOwnMessage(item.sender_id) ? styles.ownMessage : styles.otherMessage
-          ]}>
-            <Text style={[
-              styles.messageText,
-              isOwnMessage(item.sender_id) ? styles.ownMessageText : styles.otherMessageText
-            ]}>
-              {item.content}
-            </Text>
-            <Text style={styles.messageTime}>
-              {new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+        renderItem={renderMessage}
+        onContentSizeChange={() => flatListRef.current?.scrollToEnd()}
+        contentContainerStyle={styles.messagesList}
+      />
+
+      <ImageView
+        images={[{ uri: selectedImageUrl || '' }]}
+        imageIndex={0}
+        visible={imageViewerVisible}
+        onRequestClose={() => setImageViewerVisible(false)}
+        swipeToCloseEnabled={true}
+        doubleTapToZoomEnabled={true}
+        HeaderComponent={({ imageIndex }) => (
+          <View style={styles.imageViewerHeader}>
+            <TouchableOpacity
+              onPress={() => setImageViewerVisible(false)}
+              style={styles.closeButton}
+            >
+              <MaterialIcons name="close" size={28} color="#fff" />
+            </TouchableOpacity>
+          </View>
+        )}
+        FooterComponent={({ imageIndex }) => (
+          <View style={styles.imageViewerFooter}>
+            <Text style={styles.imageViewerText}>
+              {new Date().toLocaleDateString()}
             </Text>
           </View>
         )}
-        onContentSizeChange={() => flatListRef.current?.scrollToEnd()}
-        contentContainerStyle={styles.messagesList}
       />
 
       <KeyboardAvoidingView
@@ -153,6 +356,18 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ roomId }) => {
         style={styles.inputWrapper}
       >
         <View style={styles.inputContainer}>
+          <TouchableOpacity 
+            style={styles.mediaButton} 
+            onPress={handleImagePick}
+            disabled={isUploading}
+          >
+            {isUploading ? (
+              <ActivityIndicator size="small" color="#4ecdc4" />
+            ) : (
+              <MaterialIcons name="image" size={24} color="#4ecdc4" />
+            )}
+          </TouchableOpacity>
+
           <TextInput
             ref={inputRef}
             style={styles.input}
@@ -162,12 +377,20 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ roomId }) => {
             multiline
             maxLength={500}
           />
+          
           <TouchableOpacity 
-            style={[styles.sendButton, !newMessage.trim() && styles.sendButtonDisabled]} 
+            style={[
+              styles.sendButton, 
+              (!newMessage.trim() && !isUploading) && styles.sendButtonDisabled
+            ]} 
             onPress={sendMessage}
-            disabled={!newMessage.trim()}
+            disabled={!newMessage.trim() && !isUploading}
           >
-            <MaterialIcons name="send" size={24} color={newMessage.trim() ? "#fff" : "#A0AEC0"} />
+            <MaterialIcons 
+              name="send" 
+              size={24} 
+              color={newMessage.trim() ? "#fff" : "#A0AEC0"} 
+            />
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
@@ -223,10 +446,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     padding: 10,
     alignItems: 'center',
+    backgroundColor: '#fff',
   },
   input: {
     flex: 1,
-    marginRight: 10,
+    marginHorizontal: 10,
     padding: 10,
     backgroundColor: '#f8fafc',
     borderRadius: 20,
@@ -243,7 +467,62 @@ const styles = StyleSheet.create({
   },
   sendButtonDisabled: {
     backgroundColor: '#E2E8F0',
-  }
+  },
+  mediaButton: {
+    padding: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  messageImage: {
+    width: 200,
+    height: 200,
+    borderRadius: 10,
+    marginBottom: 5,
+    backgroundColor: '#f0f0f0', // Placeholder color while loading
+  },
+  imageViewerHeader: {
+    position: 'absolute',
+    top: 40,
+    left: 0,
+    right: 0,
+    height: 50,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    zIndex: 100,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 15,
+  },
+  closeButton: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  imageViewerFooter: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 50,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  imageViewerText: {
+    color: '#fff',
+    fontSize: 14,
+  },
+  imageLoadingContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f0f0f0',
+    borderRadius: 10,
+  },
 });
 
 export default ChatRoom; 
