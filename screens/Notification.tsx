@@ -96,56 +96,72 @@ const NotificationPage: React.FC = () => {
         return;
       }
 
-      // Check for existing room with either combination of items
-      const { data: existingRoom } = await supabase
-        .from('chat_rooms')
-        .select('*')
-        .or(
-          `and(lost_item_id.eq.${notification.related_items.lost_item_id},found_item_id.eq.${notification.related_items.found_item_id}),` +
-          `and(lost_item_id.eq.${notification.related_items.found_item_id},found_item_id.eq.${notification.related_items.lost_item_id})`
-        )
+      // First, fetch both lost and found item details to get the correct user IDs
+      const { data: lostItem } = await supabase
+        .from('lost')
+        .select('user_id')
+        .eq('id', notification.related_items.lost_item_id)
         .single();
 
-      console.log('Room lookup:', {
-        lost_id: notification.related_items.lost_item_id,
-        found_id: notification.related_items.found_item_id,
-        existingRoom: existingRoom ? existingRoom.id : 'none'
-      });
+      const { data: foundItem } = await supabase
+        .from('found')
+        .select('user_id')
+        .eq('id', notification.related_items.found_item_id)
+        .single();
+
+      if (!lostItem || !foundItem) {
+        throw new Error('Could not find item details');
+      }
+
+      // Check for existing room
+      const { data: existingRooms } = await supabase
+        .from('chat_rooms')
+        .select('*')
+        .or(`lost_item_id.eq.${notification.related_items.lost_item_id},found_item_id.eq.${notification.related_items.found_item_id}`);
 
       let roomId: string;
 
-      if (existingRoom) {
-        console.log('Using existing room:', existingRoom.id);
-        roomId = existingRoom.id;
+      if (existingRooms && existingRooms.length > 0) {
+        console.log('Using existing room:', existingRooms[0].id);
+        roomId = existingRooms[0].id;
       } else {
-        const isLostItemOwner = notification.message.includes("matches your lost");
-        
-        console.log('Creating new room:', {
-          isLostItemOwner,
-          current_user: session.user.id,
-          other_user: notification.user_id,
-          lost_item: notification.related_items.lost_item_id,
-          found_item: notification.related_items.found_item_id
-        });
-
+        // Create new chat room with correct user IDs
         const { data: newRoom, error: createError } = await supabase
           .from('chat_rooms')
-          .insert({
+          .upsert({
             lost_item_id: notification.related_items.lost_item_id,
             found_item_id: notification.related_items.found_item_id,
-            lost_user_id: isLostItemOwner ? session.user.id : notification.user_id,
-            found_user_id: isLostItemOwner ? notification.user_id : session.user.id
+            lost_user_id: lostItem.user_id,    // Use actual lost item owner's ID
+            found_user_id: foundItem.user_id    // Use actual found item owner's ID
+          }, {
+            onConflict: 'lost_item_id,found_item_id',
+            ignoreDuplicates: true
           })
           .select()
           .single();
 
         if (createError) {
           console.error('Create room error:', createError);
-          throw createError;
+          // Double check if room was created by someone else
+          const { data: lastCheck } = await supabase
+            .from('chat_rooms')
+            .select('*')
+            .or(`lost_item_id.eq.${notification.related_items.lost_item_id},found_item_id.eq.${notification.related_items.found_item_id}`);
+          
+          if (lastCheck && lastCheck.length > 0) {
+            roomId = lastCheck[0].id;
+          } else {
+            throw createError;
+          }
+        } else {
+          roomId = newRoom.id;
         }
-        
-        roomId = newRoom.id;
-        console.log('Created new room:', roomId);
+      }
+
+      // Verify that current user is part of this chat
+      if (session.user.id !== lostItem.user_id && session.user.id !== foundItem.user_id) {
+        Alert.alert('Error', 'You are not authorized to access this chat');
+        return;
       }
 
       router.push({

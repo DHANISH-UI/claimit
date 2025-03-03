@@ -96,45 +96,72 @@ const NotificationPage: React.FC = () => {
         return;
       }
 
-      const isLostItemOwner = notification.message.includes("matches your lost");
-      
-      // Check for existing room in both orders
+      // First, fetch both lost and found item details to get the correct user IDs
+      const { data: lostItem } = await supabase
+        .from('lost')
+        .select('user_id')
+        .eq('id', notification.related_items.lost_item_id)
+        .single();
+
+      const { data: foundItem } = await supabase
+        .from('found')
+        .select('user_id')
+        .eq('id', notification.related_items.found_item_id)
+        .single();
+
+      if (!lostItem || !foundItem) {
+        throw new Error('Could not find item details');
+      }
+
+      // Check for existing room
       const { data: existingRooms } = await supabase
         .from('chat_rooms')
-        .select('id')
-        .or(`lost_item_id.eq.${notification.related_items.lost_item_id},lost_item_id.eq.${notification.related_items.found_item_id}`)
-        .or(`found_item_id.eq.${notification.related_items.found_item_id},found_item_id.eq.${notification.related_items.lost_item_id}`)
-        .limit(1);
+        .select('*')
+        .or(`lost_item_id.eq.${notification.related_items.lost_item_id},found_item_id.eq.${notification.related_items.found_item_id}`);
 
       let roomId: string;
 
       if (existingRooms && existingRooms.length > 0) {
-        console.log('Found existing room:', existingRooms[0].id);
+        console.log('Using existing room:', existingRooms[0].id);
         roomId = existingRooms[0].id;
       } else {
-        // Create new chat room with consistent item order
+        // Create new chat room with correct user IDs
         const { data: newRoom, error: createError } = await supabase
           .from('chat_rooms')
-          .insert({  // Changed back to insert since we verified no room exists
+          .upsert({
             lost_item_id: notification.related_items.lost_item_id,
             found_item_id: notification.related_items.found_item_id,
-            lost_user_id: isLostItemOwner ? session.user.id : notification.user_id,
-            found_user_id: isLostItemOwner ? notification.user_id : session.user.id
+            lost_user_id: lostItem.user_id,    // Use actual lost item owner's ID
+            found_user_id: foundItem.user_id    // Use actual found item owner's ID
+          }, {
+            onConflict: 'lost_item_id,found_item_id',
+            ignoreDuplicates: true
           })
           .select()
           .single();
 
         if (createError) {
           console.error('Create room error:', createError);
-          throw createError;
+          // Double check if room was created by someone else
+          const { data: lastCheck } = await supabase
+            .from('chat_rooms')
+            .select('*')
+            .or(`lost_item_id.eq.${notification.related_items.lost_item_id},found_item_id.eq.${notification.related_items.found_item_id}`);
+          
+          if (lastCheck && lastCheck.length > 0) {
+            roomId = lastCheck[0].id;
+          } else {
+            throw createError;
+          }
+        } else {
+          roomId = newRoom.id;
         }
-        
-        if (!newRoom) {
-          throw new Error('Failed to create chat room');
-        }
-        
-        console.log('Created new room:', newRoom.id);
-        roomId = newRoom.id;
+      }
+
+      // Verify that current user is part of this chat
+      if (session.user.id !== lostItem.user_id && session.user.id !== foundItem.user_id) {
+        Alert.alert('Error', 'You are not authorized to access this chat');
+        return;
       }
 
       router.push({
