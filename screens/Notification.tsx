@@ -96,26 +96,41 @@ const NotificationPage: React.FC = () => {
         return;
       }
 
-      const isLostItemOwner = notification.message.includes("matches your lost");
-      
-      // Check for existing room in both orders
-      const { data: existingRooms } = await supabase
+      // Check for existing room with either combination of items
+      const { data: existingRoom } = await supabase
         .from('chat_rooms')
-        .select('id')
-        .or(`lost_item_id.eq.${notification.related_items.lost_item_id},lost_item_id.eq.${notification.related_items.found_item_id}`)
-        .or(`found_item_id.eq.${notification.related_items.found_item_id},found_item_id.eq.${notification.related_items.lost_item_id}`)
-        .limit(1);
+        .select('*')
+        .or(
+          `and(lost_item_id.eq.${notification.related_items.lost_item_id},found_item_id.eq.${notification.related_items.found_item_id}),` +
+          `and(lost_item_id.eq.${notification.related_items.found_item_id},found_item_id.eq.${notification.related_items.lost_item_id})`
+        )
+        .single();
+
+      console.log('Room lookup:', {
+        lost_id: notification.related_items.lost_item_id,
+        found_id: notification.related_items.found_item_id,
+        existingRoom: existingRoom ? existingRoom.id : 'none'
+      });
 
       let roomId: string;
 
-      if (existingRooms && existingRooms.length > 0) {
-        console.log('Found existing room:', existingRooms[0].id);
-        roomId = existingRooms[0].id;
+      if (existingRoom) {
+        console.log('Using existing room:', existingRoom.id);
+        roomId = existingRoom.id;
       } else {
-        // Create new chat room with consistent item order
+        const isLostItemOwner = notification.message.includes("matches your lost");
+        
+        console.log('Creating new room:', {
+          isLostItemOwner,
+          current_user: session.user.id,
+          other_user: notification.user_id,
+          lost_item: notification.related_items.lost_item_id,
+          found_item: notification.related_items.found_item_id
+        });
+
         const { data: newRoom, error: createError } = await supabase
           .from('chat_rooms')
-          .insert({  // Changed back to insert since we verified no room exists
+          .insert({
             lost_item_id: notification.related_items.lost_item_id,
             found_item_id: notification.related_items.found_item_id,
             lost_user_id: isLostItemOwner ? session.user.id : notification.user_id,
@@ -129,12 +144,8 @@ const NotificationPage: React.FC = () => {
           throw createError;
         }
         
-        if (!newRoom) {
-          throw new Error('Failed to create chat room');
-        }
-        
-        console.log('Created new room:', newRoom.id);
         roomId = newRoom.id;
+        console.log('Created new room:', roomId);
       }
 
       router.push({
