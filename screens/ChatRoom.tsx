@@ -161,14 +161,15 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ roomId }) => {
         {
           event: 'DELETE',
           schema: 'public',
-          table: 'messages',
-          filter: `chat_room_id=eq.${roomId}`,
+          table: 'messages'
         },
         (payload) => {
           console.log('Message deleted:', payload.old);
-          setMessages((currentMessages) => 
-            currentMessages.filter(msg => msg.id !== payload.old.id)
-          );
+          if (payload.old && payload.old.chat_room_id === roomId) {
+            setMessages((currentMessages) => 
+              currentMessages.filter(msg => msg.id !== payload.old.id)
+            );
+          }
         }
       )
       .subscribe();
@@ -323,19 +324,38 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ roomId }) => {
     if (senderId !== currentUserId) return;
 
     try {
-      const { error } = await supabase
+      console.log('Attempting to delete message:', messageId);
+      
+      // First verify the message exists
+      const { data: messageExists } = await supabase
+        .from('messages')
+        .select('id')
+        .eq('id', messageId)
+        .single();
+
+      console.log('Message exists check:', messageExists);
+
+      // Delete the message
+      const { error, data } = await supabase
         .from('messages')
         .delete()
-        .eq('id', messageId);
+        .eq('id', messageId)
+        .select();  // Add this to get deletion confirmation
 
-      if (error) throw error;
-
-      // Update local state
-      setMessages(prevMessages => 
-        prevMessages.filter(message => message.id !== messageId)
-      );
+      if (error) {
+        console.error('Error deleting message:', error);
+        throw error;
+      } else {
+        console.log('Delete operation response:', data);
+        console.log('Message successfully deleted from database');
+        
+        // Update local state only after successful deletion
+        setMessages(prevMessages => 
+          prevMessages.filter(message => message.id !== messageId)
+        );
+      }
     } catch (error) {
-      console.error('Error deleting message:', error);
+      console.error('Error in delete operation:', error);
       Alert.alert('Error', 'Failed to delete message');
     }
   };
