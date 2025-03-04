@@ -122,7 +122,9 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ roomId }) => {
       const { error } = await supabase.from('messages').insert({
         chat_room_id: roomId,
         content: newMessage.trim(),
-        sender_id: currentUserId
+        sender_id: currentUserId,
+        type: 'text',
+        metadata: {}
       });
 
       if (error) throw error;
@@ -186,45 +188,31 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ roomId }) => {
     
     try {
       setIsUploading(true);
+      console.log('Starting image upload, URI:', imageAsset.uri);
 
-      // First, read the file as base64
+      // Generate filename
+      const fileExt = imageAsset.uri.split('.').pop()?.toLowerCase() || 'jpeg';
+      const mimeType = fileExt === 'jpg' ? 'jpeg' : fileExt;
+      const fileName = `${currentUserId}/${Date.now()}.${fileExt}`;
+
+      // Read file as base64
       const base64 = await FileSystem.readAsStringAsync(imageAsset.uri, {
-        encoding: FileSystem.EncodingType.Base64,
+        encoding: FileSystem.EncodingType.Base64
       });
 
-      // Generate a unique filename
-      const fileExt = imageAsset.uri.split('.').pop() || 'jpg';
-      const fileName = `${roomId}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
-
-      // Upload directly using base64
+      // Upload to Supabase
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from('chat-images')
         .upload(fileName, decode(base64), {
-          contentType: `image/${fileExt}`,
-          upsert: false
+          contentType: `image/${mimeType}`
         });
 
-      if (uploadError) {
-        console.error('Upload error:', uploadError);
-        throw uploadError;
-      }
+      if (uploadError) throw uploadError;
 
-      // Get public URL - Add this logging
+      // Get public URL
       const { data: { publicUrl } } = supabase.storage
         .from('chat-images')
         .getPublicUrl(fileName);
-
-      console.log('Image public URL:', publicUrl); // Add this log
-
-      // Verify the URL is accessible
-      try {
-        const response = await fetch(publicUrl);
-        if (!response.ok) {
-          throw new Error('Image URL not accessible');
-        }
-      } catch (error) {
-        console.error('Image access error:', error);
-      }
 
       // Create message with image URL
       const { error: messageError } = await supabase.from('messages').insert({
@@ -234,17 +222,14 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ roomId }) => {
         type: 'image',
         metadata: {
           width: imageAsset.width,
-          height: imageAsset.height,
+          height: imageAsset.height
         }
       });
 
-      if (messageError) {
-        console.error('Message error:', messageError);
-        throw messageError;
-      }
+      if (messageError) throw messageError;
 
     } catch (error) {
-      console.error('Error uploading image:', error);
+      console.error('Upload error:', error);
       Alert.alert('Error', 'Failed to send image. Please try again.');
     } finally {
       setIsUploading(false);

@@ -470,135 +470,121 @@ const LostItemPage: React.FC = () => {
   }, []);
 
   const handleSubmit = async () => {
-    console.log('Starting form submission process...');
-
-    // Validate all required fields
     if (!itemName || !category || !description || !date || !contactDetails || !selectedLocation) {
-      Alert.alert('Error', 'Please fill all fields, upload a photo, and select a location.');
+      Alert.alert('Error', 'Please fill all fields and select a location');
       return;
     }
 
     try {
       setLoading(true);
 
-      // Check authentication
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      if (sessionError || !session) {
-        throw new Error('Authentication required. Please sign in.');
-      }
-
-      // Prepare and send data to Supabase (excluding actual photo files)
-      const lostItemData = {
-        user_id: session.user.id,
-        item_name: itemName.trim(),
-        category: category.trim(),
-        description: description.trim(),
-        date_lost: new Date(date).toISOString().split('T')[0],
-        contact_details: contactDetails.trim(),
-        location: {
-          latitude: selectedLocation.latitude,
-          longitude: selectedLocation.longitude,
-        },
-        status: 'active',
-      };
-
-      // First save the lost item
+      // Create the lost item first
       const { data: lostItem, error: lostError } = await supabase
         .from('lost')
-        .insert([lostItemData])
-        .select();
+        .insert([{
+          user_id: (await supabase.auth.getUser()).data.user?.id,
+          item_name: itemName,
+          category,
+          description,
+          date_lost: date,
+          contact_details: contactDetails,
+          location: selectedLocation,
+          status: 'active'
+        }])
+        .select()
+        .single();
 
       if (lostError) throw lostError;
 
-      // Check for matches in found items
-      const { data: foundItems, error: foundError } = await supabase
-        .from('found')
-        .select('*')
-        .eq('status', 'active');
+      // Show success message first
+      Alert.alert(
+        'Success',
+        'Lost item report submitted successfully!',
+        [{ 
+          text: 'OK',
+          onPress: async () => {
+            // Check for matches after user acknowledges submission
+            await checkForMatches(lostItem);
+            router.back();
+          }
+        }]
+      );
 
-      if (foundError) throw foundError;
+    } catch (error) {
+      console.error('Error:', error);
+      Alert.alert('Error', 'Failed to submit lost item');
+    } finally {
+      setLoading(false);
+    }
+  };
 
-      // Check each found item for a potential match
-      const matches = foundItems.filter(foundItem => {
-        const nameMatch = foundItem.item_name.toLowerCase().includes(itemName.toLowerCase()) ||
-                         itemName.toLowerCase().includes(foundItem.item_name.toLowerCase());
-        
-        const categoryMatch = foundItem.category === category;
-        
-        const distance = calculateDistance(
-          foundItem.location.latitude,
-          foundItem.location.longitude,
-          selectedLocation.latitude,
-          selectedLocation.longitude
-        );
-        const locationMatch = distance < 1; // Within 1km
+  // Separate function to check matches
+  const checkForMatches = async (lostItem: any) => {
+    // Check for matches in existing found items
+    const { data: foundItems, error: foundError } = await supabase
+      .from('found')
+      .select('*')
+      .eq('status', 'active');
 
-        return (nameMatch && categoryMatch) || (nameMatch && locationMatch);
-      });
+    if (foundError) throw foundError;
 
-      if (matches.length > 0) {
-        // Create notifications for matches
-        const notifications = matches.map(match => ({
-          user_id: match.user_id,
-          type: 'match',
-          title: 'Match with Found Item',
-          message: `Your found item matches with someone's lost ${itemName}!`,
-          related_items: {
-            lost_item_id: lostItem[0].id,
-            found_item_id: match.id
+    // Filter potential matches
+    const matches = foundItems?.filter(foundItem => {
+      const nameMatch = foundItem.item_name.toLowerCase().includes(itemName.toLowerCase()) ||
+                     itemName.toLowerCase().includes(foundItem.item_name.toLowerCase());
+      const categoryMatch = foundItem.category === category;
+      
+      const distance = calculateDistance(
+        foundItem.location.latitude,
+        foundItem.location.longitude,
+        selectedLocation.latitude,
+        selectedLocation.longitude
+      );
+      const locationMatch = distance < 1; // Within 1km
+
+      return (nameMatch && categoryMatch) || (nameMatch && locationMatch);
+    });
+
+    if (matches && matches.length > 0) {
+      // Create notifications for both users for each match
+      for (const match of matches) {
+        const notifications = [
+          // Notification for lost item owner (current user)
+          {
+            user_id: lostItem.user_id,
+            type: 'match',
+            title: 'Potential Match Found',
+            message: `Someone found an item that matches your lost ${itemName}!`,
+            related_items: { lost_item_id: lostItem.id, found_item_id: match.id },
+            read: false,
+            created_at: new Date().toISOString()
           },
-          read: false,
-          created_at: new Date().toISOString()
-        }));
+          // Notification for finder
+          {
+            user_id: match.user_id,
+            type: 'match',
+            title: 'Match with Lost Item',
+            message: `Your found item matches with someone's lost ${itemName}!`,
+            related_items: { lost_item_id: lostItem.id, found_item_id: match.id },
+            read: false,
+            created_at: new Date().toISOString()
+          }
+        ];
 
         // Insert notifications
         for (const notification of notifications) {
-          const { error: notificationError } = await supabase
+          await supabase
             .from('notifications')
             .insert([notification]);
-
-          if (notificationError) {
-            console.error('Error creating notification:', notificationError);
-          }
         }
-
-        // Show alert about matches
-        Alert.alert(
-          'Potential Match Found!',
-          'We found some items that match your lost item. Check your notifications.',
-          [
-            { 
-              text: 'View Notifications', 
-              onPress: () => router.push('/(screens)/notification')
-            },
-            { text: 'Later', style: 'cancel' }
-          ]
-        );
       }
 
+      // Show alert about matches
       Alert.alert(
-        'Success', 
-        'Lost item report created! ' + 
-        (matches.length > 0 ? 'We found some potential matches!' : ''),
-        [{ text: 'OK', onPress: () => router.back() }]
+        'Potential Matches Found!',
+        'We found some items that match your lost item. Check your notifications.',
+        [{ text: 'OK' }]
       );
-
-      // Reset the form
-      setItemName('');
-      setCategory('');
-      setDescription('');
-      setDate('');
-      setContactDetails('');
-      setPhotos([]);
-      setSelectedLocation(null);
-      setLocation(null);
-
-    } catch (error: unknown) {
-      console.error('Submission error:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Failed to submit lost item. Please try again.';
-      Alert.alert('Error', errorMessage);
-    } finally {
-      setLoading(false);
     }
   };
 
