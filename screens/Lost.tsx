@@ -528,17 +528,21 @@ const LostItemPage: React.FC = () => {
 
     if (foundError) throw foundError;
 
+
+
+    
     // Filter potential matches
     const matches = foundItems?.filter(foundItem => {
       const nameMatch = foundItem.item_name.toLowerCase().includes(itemName.toLowerCase()) ||
                      itemName.toLowerCase().includes(foundItem.item_name.toLowerCase());
       const categoryMatch = foundItem.category === category;
       
+      
       const distance = calculateDistance(
+        selectedLocation?.latitude ?? 0, // Ensure selectedLocation is not null
+        selectedLocation?.longitude ?? 0, // Ensure selectedLocation is not null
         foundItem.location.latitude,
-        foundItem.location.longitude,
-        selectedLocation.latitude,
-        selectedLocation.longitude
+        foundItem.location.longitude
       );
       const locationMatch = distance < 1; // Within 1km
 

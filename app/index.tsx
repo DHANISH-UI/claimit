@@ -4,6 +4,9 @@ import SignInSignUpPage from '@/screens/SignInSignUpPage';
 import HomePage from '@/screens/HomePage';
 import { supabase } from '@/lib/supabase';
 
+
+//Authentication part
+
 export default function App() {
   const [loading, setLoading] = useState(true);
   const [authenticated, setAuthenticated] = useState(false);
