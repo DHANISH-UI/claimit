@@ -5,7 +5,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 
 // Define navigation type properly
@@ -61,6 +61,14 @@ const HomePage: React.FC = () => {
     useEffect(() => {
         getUserName();
     }, []);
+    
+    // Add this new effect to refresh username when the screen comes into focus
+    useFocusEffect(
+        React.useCallback(() => {
+            getUserName();
+            return () => {};
+        }, [])
+    );
 
     const getUserName = async () => {
         try {
@@ -190,23 +198,7 @@ const HomePage: React.FC = () => {
                 </View>
 
                 {/* Stats Section */}
-                <View style={styles.sectionContainer}>
-                    <View style={styles.sectionTitleContainer}>
-                        <Ionicons name="stats-chart" size={24} color="#2c3e50" />
-                        <Text style={styles.sectionTitle}>Weekly Success</Text>
-                    </View>
-                    <View style={styles.statsRow}>
-                        <View style={styles.statItem}>
-                            <Text style={styles.statNumber}>42</Text>
-                            <Text style={styles.statLabel}>Items Reunited</Text>
-                        </View>
-                        <View style={styles.statDivider} />
-                        <View style={styles.statItem}>
-                            <Text style={styles.statNumber}>1.2K</Text>
-                            <Text style={styles.statLabel}>Active Users</Text>
-                        </View>
-                    </View>
-                </View>
+                
 
                 {/* Reviews Section */}
                 <View style={styles.sectionContainer}>
@@ -281,7 +273,23 @@ const HomePage: React.FC = () => {
                         </TouchableOpacity>
                     </View>
                 </View>
-
+                <View style={styles.sectionContainer}>
+                    <View style={styles.sectionTitleContainer}>
+                        <Ionicons name="stats-chart" size={24} color="#2c3e50" />
+                        <Text style={styles.sectionTitle}>Weekly Success</Text>
+                    </View>
+                    <View style={styles.statsRow}>
+                        <View style={styles.statItem}>
+                            <Text style={styles.statNumber}>42</Text>
+                            <Text style={styles.statLabel}>Items Reunited</Text>
+                        </View>
+                        <View style={styles.statDivider} />
+                        <View style={styles.statItem}>
+                            <Text style={styles.statNumber}>1.2K</Text>
+                            <Text style={styles.statLabel}>Active Users</Text>
+                        </View>
+                    </View>
+                </View>
                 {/* Help Section */}
                 <View style={styles.sectionContainer}>
                     <View style={styles.sectionTitleContainer}>
@@ -340,7 +348,7 @@ const HomePage: React.FC = () => {
                         </View>
                     </View>
                     <View style={styles.copyrightContainer}>
-                        <Text style={styles.copyright}>© 2024 Lost & Found. All rights reserved.</Text>
+                        <Text style={styles.copyright}>© 2025 Lost & Found. All rights reserved.</Text>
                     </View>
                 </LinearGradient>
             </View>

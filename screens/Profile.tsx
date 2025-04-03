@@ -82,19 +82,19 @@ const ProfilePage = () => {
   };
 
   const handleEditProfile = () => {
-    Alert.alert('Coming Soon', 'Profile editing will be available soon!');
+    router.push('/(screens)/EditProfile' as any);
   };
 
   const handleNotifications = () => {
-    Alert.alert('Coming Soon', 'Notifications will be available soon!');
+    router.push('/(screens)/notification');
   };
 
   const handlePrivacySecurity = () => {
-    Alert.alert('Coming Soon', 'Privacy settings will be available soon!');
+    router.push('/(screens)/PrivacySecurity' as any);
   };
 
   const handleHelpSupport = () => {
-    Alert.alert('Coming Soon', 'Help & Support will be available soon!');
+    router.push('/(screens)/chat-support');
   };
 
   if (loading) {
